@@ -2,6 +2,10 @@
 
 This document outlines the master scope of CareerPilot. It begins by listing all possible capabilities, then organizes them into phases: MVP, V1, V2, and Advanced.
 
+This is the detailed reference for scope and prioritization. For distilled, task-oriented views
+of the same information, see [01-introduction.md](./01-introduction.md) and
+[02-use-cases.md](./02-use-cases.md).
+
 ## Classification Principles
 
 - **MVP**: Sufficient to demonstrate three genuinely different features working end-to-end.
