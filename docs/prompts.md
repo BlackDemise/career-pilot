@@ -1,0 +1,3 @@
+Đọc overall.md và sau đó refactor lại chuẩn format Markdown giúp mình. Chỉ dùng bảng chữ cái, chữ số và các kí tự thuộc cú pháp của Markdown.
+Đây sẽ là baseline cho dự án mình định làm, về sau sẽ phân tích requirement/techstack kĩ hơn nên hãy refactor lại thật chuẩn giúp mình - hình dung bạn sẽ cần những thông tin gì để về sau có thể triển khai một cách rõ ràng, và viết lại theo đó.
+Nếu có thông tin gì chưa rõ ràng, hãy hỏi mình để làm rõ trước - không tự suy đoán bất cứ thông tin nào.
