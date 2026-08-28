@@ -1,4 +1,6 @@
-Evaluate the candidate's answer below. Respond with a score, strengths, weaknesses, and feedback.
+Evaluate the candidate's answer below. Respond with JSON only, using exactly the fields score,
+strengths, weaknesses, and feedback. Score must be an integer from 0 to 10, and strengths and
+weaknesses must be arrays of strings. Do not wrap the JSON in markdown.
 
 Question:
 {{question}}

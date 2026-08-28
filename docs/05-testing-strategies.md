@@ -28,13 +28,26 @@ applied while writing tests.
 
 ## Frontend (`fe/`)
 
-- **Frameworks (to add when frontend testing starts)**: Vitest (pairs naturally with Vite) and
   React Testing Library. Not yet present in `fe/package.json` — add them as a dedicated setup
-  step before the first test is written.
 - **What to test**:
   - Feature hooks and API-layer functions (`features/*/api.ts`) with the HTTP client mocked.
   - Component behavior via React Testing Library (render, user interaction, assertions on
     rendered output) rather than internal state/implementation details.
+ **Frameworks and utilities**: Vitest, jsdom, React Testing Library, `@testing-library/user-event`,
+   and `@testing-library/jest-dom`. These are the planned frontend baseline and should be added to
+   `devDependencies` before the first feature test.
+ **What to test**:
+   - Feature hooks and API-layer functions (`features/*/api.ts`) with the Axios client or API
+     boundary mocked; never call the backend from the unit suite.
+   - React Query loading, success, error, invalidation, and mutation behavior through observable
+     component output, not cache internals.
+   - Component behavior via React Testing Library and `user-event` (render, keyboard/pointer input,
+     form submission, and assertions on accessible output) rather than implementation details.
+   - The auth interceptor's refresh-once behavior, repeated-401 logout, and 403 handling with mocked
+     Axios responses.
+   - The interview WebSocket adapter and reducer with fake `react-use-websocket` messages; assert
+     state transitions, stale-event rejection, timers, and completion behavior.
+   - Avoid testing third-party library internals or trivial prop pass-through components.
   - Avoid testing third-party library internals or trivial prop pass-through components.
 
 ## Coverage Priorities (highest risk first)

@@ -2,6 +2,7 @@ package blackdemise.cp.interview.entity;
 
 import blackdemise.cp.common.BaseEntity;
 import blackdemise.cp.interview.InterviewStatus;
+import blackdemise.cp.interview.InterviewPhase;
 import blackdemise.cp.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -44,4 +45,32 @@ public class InterviewSession extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private InterviewStatus status;
+
+    @Column(nullable = false)
+    private Integer durationSeconds;
+
+    @Column(nullable = false)
+    private Integer minimumPrimaryQuestions;
+
+    @Column(nullable = false)
+    private Integer maximumPrimaryQuestions;
+
+    @Column(nullable = false)
+    private Integer primaryQuestionsAsked = 0;
+
+    @Column(nullable = false)
+    private Integer totalTurns = 0;
+
+    @Column
+    private java.time.Instant endsAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column
+    private InterviewPhase currentPhase;
+
+    @Column
+    private String selectedPlanJson;
+
+    @Column
+    private java.util.UUID currentQuestionId;
 }

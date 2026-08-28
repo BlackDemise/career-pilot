@@ -74,15 +74,16 @@ planned unless explicitly requested).
 
 | # | Use Case | Priority | Completed? |
 |---|----------|----------|------------|
-| 3.1 | User configures an interview (role, level, topic, number of questions, difficulty) | P0 | No |
-| 3.2 | System generates questions based on the configuration | P0 | No |
-| 3.3 | User submits an answer to a question | P0 | No |
-| 3.4 | System evaluates the answer (score, strengths, weaknesses, feedback) | P0 | No |
-| 3.5 | Interview progresses through a state machine (SETUP → QUESTION → ANSWER → EVALUATION → ... → COMPLETED) | P0 | No |
-| 3.6 | System produces a final report (overall score, strengths, weaknesses, recommendations) | P0 | No |
-| 3.7 | Structured questions/evaluation, adaptive difficulty, follow-up questions, JD-based interview config | P1 | No |
-| 3.8 | Web search for version-specific/fresh knowledge (e.g. current framework versions) | P1 | No |
-| 3.9 | Fully adaptive interviewer, resume-based interview, performance tracking across sessions | P2/P3 | No |
+| 3.1 | User configures an interview from database-backed role, level, topic, duration, and question-budget catalogs | P0 | No |
+| 3.2 | System validates role/level/topic compatibility and supports a backend-generated valid plan | P0 | No |
+| 3.3 | System conducts a turn-by-turn interview through WebSocket with introduction, warm-up, main, situational, and closing phases | P0 | No |
+| 3.4 | System accepts answers, enforces server-side answer deadlines, and records timeout events | P0 | No |
+| 3.5 | Backend maintains interview state, current question count, phase, budget, and controlled early-ending decisions | P0 | No |
+| 3.6 | System records browser window/full-screen integrity events during the interview | P0 | No |
+| 3.7 | System produces one final evaluation only after the interview ends | P0 | No |
+| 3.8 | Structured questions/evaluation, adaptive difficulty, follow-up questions, JD-based interview config | P1 | No |
+| 3.9 | Web search for version-specific/fresh knowledge (e.g. current framework versions) | P1 | No |
+| 3.10 | Fully adaptive interviewer, resume-based interview, performance tracking across sessions | P2/P3 | No |
 
 ## 4. Cross-Feature Integration (not MVP)
 
@@ -97,7 +98,7 @@ planned unless explicitly requested).
 1. Shared AI infrastructure (0.1–0.4)
 2. Basic Chat (1.1–1.6) — validates the AI service end-to-end with the simplest workflow
 3. CV Review + CV/JD Analysis (2.1–2.4) — validates document handling and structured output
-4. Mock Interview (3.1–3.6) — validates stateful, multi-turn AI workflows
+4. Mock Interview (3.1–3.7) — validates stateful, multi-turn AI workflows
 
 This order matches [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 29: prove three
 workflows of a genuinely different nature on top of one well-designed AI infrastructure, rather

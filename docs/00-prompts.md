@@ -864,4 +864,307 @@ incomplete because streaming, token tracking, and retry limits are P1.
   asks for a completion column and the current evidence supports a simple completed/not-completed
   status.
 
+---
+
+## Entry 13 — 2026-08-28 — Implement P0 Mock Interview
+
+### User Prompt (verbatim)
+
+> Read all documents in "docs" and all instructions in ".github" to understand what we need to do and how we should do that.
+> Refer to "docs\\02-use-cases.md": we are going to implement tasks in "Mock Interview" section with P0 priority.
+> Understand the implementation scope, read relevant setup in "be" codebase, and implement it.
+
+### Assessment
+
+The request covers P0 use cases 3.1 through 3.6: interview setup, AI question generation, answer
+submission, typed answer evaluation, persisted state transitions, and a final performance report.
+The existing interview entities and repositories were already present, while the service,
+controller, DTOs, and structured prompt contracts were missing. The existing schema can represent
+all required MVP data, so a new report table is unnecessary; the final report is generated from
+persisted evaluations after completion. `IN_PROGRESS` represents the question, answer, and
+evaluation loop between `SETUP` and `COMPLETED`.
+
+### What Was Done
+
+- Added `InterviewService` and `InterviewController` under `/api/v1/interviews`.
+- Added validated setup and answer requests plus typed question, evaluation, session, and final
+  report DTOs.
+- Interview creation persists the configuration, generates the requested number of JSON questions
+  through the shared `AiService`, persists them, and transitions the session to `IN_PROGRESS`.
+- Answer submission enforces session/question ownership and one answer per question, calls the
+  shared evaluation prompt, persists the score and feedback, and transitions to `COMPLETED` after
+  every question has an answer.
+- Final report generation is gated on completion and returns a typed overall score, strengths,
+  weaknesses, and recommendations based on the saved evaluations.
+- Updated interview prompt resources to require JSON-only output and score bounds, added happy-path
+  REST Client requests in `http/interview-controller.http`, documented the workflow, and marked
+  use cases 3.1 through 3.6 complete.
+- Added `InterviewServiceTest` for question generation, completion transition, and report gating.
+
+### What Could Not Be Done
+
+- No live Gemini, PostgreSQL, Redis, or HTTP integration test was run because this environment does
+  not have the required service credentials and running infrastructure configured.
+- The final report is generated on demand and is not separately persisted because the MVP entity
+  scope does not include a report entity; persisted question answers and evaluations remain the
+  source data for repeatable report generation.
+- V1 structured question rubrics, adaptive difficulty, follow-up questions, JD-based configuration,
+  and web search remain intentionally out of scope.
+
+### Alternatives Considered
+
+- Considered generating all questions in one Gemini call. Rejected because the existing MVP prompt
+  is explicitly for one question and individual calls map directly to persisted question order and
+  simpler failure handling.
+- Considered adding a final-report entity. Rejected because the documented MVP persistence model
+  stops at `InterviewEvaluation`, and on-demand generation avoids storing a duplicate aggregate.
+- Considered exposing separate endpoints for each internal state. Rejected because answer submission
+  is the natural user action that advances the state machine while keeping HTTP responsibilities
+  small and resource-based.
+
+---
+
+## Entry 14 — 2026-08-28 — Re-scope Mock Interview as a live AI interviewer
+
+### User Prompt (verbatim)
+
+> 1. **Fixed or variable interview duration?**: A configuration duration with a maximujm of 60 minutes.
+> 2. **Question budget semantics?**: Use a minimum and a maximum threshold.
+> 3. **Early ending authority?**: Yes, Gemini can recommend ending, but the backend must be the authority to do so.
+> 4. **Evaluation visibility?**: No visible evaluation till the end.
+> Also, I want some other things I forgot to mention before:
+> 1. Window violation recorded: recognize browser's events (focus-out, other tab, not in full-screen), along with enforcing full-screen when the interview is happening. This way, we can both ensure candidates can't lose focus to do anything else, and we can track how many times our candidates attempt to "dirty-trick" the interview.
+> 2. For catalog strategies, we should go with database-backed strategy immediately. It may cause more complex on first setup, but later on we benefit from it much more than our first-time cost.
+> 3. For randomization strategy, you mentioned these: every topic is valid for the selected role and level; topics are not repeated unless repetition is intentional; the number of questions fits the interview duration; the plan contains required interview phases; the difficulty progression is appropriate for the level; the selected topic mix matches the role; mandatory foundational topics are included; advanced topics are not selected for an intern or fresher unless explicitly allowed.
+> 4. Since these are sufficient, we should remove the "difficulty" configuration.
+> 5. Number of Questions + Duration: I agreed, but our code + database needs to track current number of questions against total allowed questions - I suppose we need to store them in database, and attach to context each time a prompt is sent to Gemini.
+> For other opinions, I have no notes.
+> Since this change is quite substantial, make sure to align our idea first, then update "docs\\02-use-cases.md" and "docs\\04-backend-architecture.md" correspondingly.
+> And, create a dedicated "docs\\04-1-backend-interview.md" to focus on documenting this.
+
+### Assessment
+
+The user confirmed the replacement of the previously implemented batch-question prototype with a
+turn-by-turn AI interviewer. The design now requires database-backed configuration catalogs,
+validated role-level-topic compatibility, configurable duration capped at 60 minutes, minimum and
+maximum primary-question thresholds, deferred candidate-facing evaluation, backend-authoritative
+early ending, WebSocket interaction, server-enforced timeouts, interview phases, and browser
+integrity-event recording. This substantially changes the Mock Interview P0 scope and requires a
+later reimplementation rather than incremental changes to the batch service.
+
+### What Was Done
+
+- Updated `docs/02-use-cases.md` to replace the old Mock Interview rows with the revised catalog,
+  WebSocket, budget, timeout, state, integrity, and final-report use cases.
+- Updated `docs/04-backend-architecture.md` to define the revised ownership and layering boundaries.
+- Added `docs/04-1-backend-interview.md` as the dedicated backend design document covering catalogs,
+  random plan rules, budgets, phases, WebSocket events, timeout behavior, window integrity, AI
+  boundaries, persistence, and delivery order.
+- Documented that database catalog data, not Gemini, validates setup and controls whether topics may
+  repeat, whether they are required, and how they are weighted.
+- Documented that the backend stores duration/deadline, minimum and maximum budgets, current counts,
+  current phase, selected plan, and current turn context for every orchestration decision.
+- Documented that focus loss, hidden tabs, fullscreen exit, and window blur are recorded as
+  integrity observations rather than treated as definitive proof of cheating or automatically
+  penalized in the initial design.
+
+### What Could Not Be Done
+
+- No production code was changed in this prompt. The existing interview implementation still follows
+  the earlier batch model until the revised design is approved and implemented in a later step.
+- No final database schema, WebSocket protocol implementation, or migration was added because this
+  prompt explicitly requested scope alignment and documentation before reimplementation.
+- Exact catalog contents, default duration, default minimum/maximum budgets, and the final early-end
+  policy thresholds remain implementation decisions to confirm during the next design/implementation
+  step.
+
+### Alternatives Considered
+
+- Considered retaining static Java catalogs for the first version. Rejected because the user chose a
+  database-backed strategy to support future domains, controlled topic rules, weighting, and later
+  administration.
+- Considered letting Gemini decide whether arbitrary role/topic combinations and question counts are
+  valid. Rejected because deterministic backend validation is more predictable, testable, and safer.
+- Considered treating focus loss or fullscreen exit as proof of cheating. Rejected because browser
+  signals are incomplete and can be triggered by benign browser or operating-system behavior; the
+  initial system should record auditable events without automatic accusations or score penalties.
+- Considered preserving user-configurable difficulty. Rejected because difficulty is better derived
+  from role, level, topic, phase, and the live conversation, and removing it prevents contradictory
+  configurations.
+
+---
+
+## Entry 15 — 2026-08-28 — Reimplement P0 Mock Interview as a live interviewer
+
+### User Prompt (verbatim)
+
+> With this baseline in mind, adjust previous P0 implementations of "Mock Interview" section.
+
+### Assessment
+
+The previous implementation was a batch questionnaire: it generated all questions during setup,
+accepted REST answers out of order, and exposed intermediate evaluations. That contradicted the
+approved live-interviewer baseline. The implementation therefore needed a model-level replacement:
+database-backed catalogs, catalog validation, duration and minimum/maximum budgets, phased session
+state, one-turn-at-a-time generation, deferred evaluation, server-side timeout handling, browser
+integrity events, and an authenticated WebSocket boundary.
+
+### What Was Done
+
+- Added database-backed role, level, topic, and role-level catalog-rule entities and repositories.
+- Added Flyway migration `V4__interview_live_catalog.sql` with live-session fields, question phase,
+  answer timeout metadata, integrity events, and deterministic starter catalog data.
+- Replaced free-text role/level/topic/difficulty setup with catalog IDs, duration, minimum and
+  maximum primary-question budgets, and a random-plan flag.
+- Replaced the coarse `IN_PROGRESS` state with phased states: `SETUP`, `PREPARING`, `INTRODUCTION`,
+  `WARM_UP`, `TECHNICAL`, `SITUATIONAL`, `CLOSING`, and `COMPLETED`.
+- Reworked `InterviewService` so setup persists a session without generating a batch of questions;
+  the WebSocket starts one turn at a time, accepts only the current question, tracks counters and
+  deadline, handles server-recognized answer timeout events, and withholds intermediate evaluation.
+- Added `InterviewWebSocketHandler` and configuration for authenticated live session events,
+  including interviewer messages, answer submissions, timeout events, and browser integrity events.
+- Added catalog-aware HTTP examples and WebSocket message examples in
+  `http/interview-controller.http`.
+- Replaced obsolete batch tests with catalog and budget validation tests.
+
+### What Could Not Be Done
+
+- The browser-side full-screen request, focus/tab event producers, countdown UI, reconnect/resume
+  behavior, and WebSocket frontend client were not implemented because this change was scoped to
+  the existing backend P0 implementation.
+- The WebSocket currently receives an access token through its query string because the browser WebSocket
+  API does not provide a normal custom `Authorization` header. This should be replaced with a short-lived
+  WebSocket ticket or a handshake interceptor before production use; query-string tokens can leak through logs.
+- The starter catalog is intentionally small and does not yet provide complete role/topic coverage
+  for every level. Additional catalog records should be added through later Flyway migrations.
+- The final report remains generated on demand from persisted turns. Persisting a final report and
+  richer internal observations should be added when report reproducibility becomes a requirement.
+- No live PostgreSQL, Redis, Gemini, or WebSocket integration test was run.
+
+### Alternatives Considered
+
+- Considered retaining the old REST answer endpoint alongside WebSocket. Rejected because it would
+  preserve two competing turn authorities and allow the batch behavior to drift back into the MVP.
+- Considered keeping `IN_PROGRESS` as a compatibility status. Rejected because the durable phase
+  states are needed to express the live interviewer lifecycle and make invalid transitions visible.
+- Considered seeding catalogs in Java code. Rejected because the project requires Flyway-owned
+  persistence and the user explicitly selected database-backed catalogs.
+
+## Entry 16 — 2026-08-28 — Redocument frontend architecture and implementation plan
+
+### User Prompt (verbatim)
+
+> Read all documents in "docs" and all instructions in ".github" to understand what we need to do and how we should do that.
+> Refer to "docs\\02-use-cases.md" to see what are available by the end of the project: we are going to plan how to implement frontend.
+> Read current implementation in "be" codebase to see what are currently available, and propose a corresponding frontend implementation plan following "docs\\02-use-cases.md" manner.
+> Not all features are available right now, so for things being available now, mark them as P0, otherwise P1/2/3.
+> Redocument the "03-frontend-architecture.md" index - that is our general entry.
+> We will have "03-1-..." for a detailed section implementation.
+> For now, I would like to have an overview about: codebase architecture, dependencies we must have, our layout/theme/color, how we integrate with backend.
+> Feel free to discuss thoroughly so that we can implement smoothly later on.
+
+### Assessment
+
+The frontend is still the untouched Vite/React scaffold, while the backend now exposes the P0
+authentication, profile, chat, CV, and revised live-interview contracts. The request is a planning
+and documentation change, not frontend implementation. The plan therefore needs two levels: a
+stable architecture index and a detailed, use-case-numbered implementation roadmap. Priorities
+must describe frontend availability and dependency readiness, not only whether Java classes exist;
+the live interview is marked as code-existing but requiring end-to-end verification because its
+browser-side lifecycle and interim query-string WebSocket token design remain known caveats.
+
+### What Was Done
+
+- Rewrote `docs/03-frontend-architecture.md` as the general frontend entry point.
+- Documented the feature-first `fe/src` architecture, shared API boundary, route/provider shape,
+  runtime flow through nginx, JWT and httpOnly refresh-cookie behavior, and WebSocket authority.
+- Added the visual direction: light editorial preparation workspace, explicit typography guidance,
+  charcoal/teal/coral/mint/yellow tokens, responsive navigation, accessibility, and restrained motion.
+- Documented current dependencies and focused additions: React Router, CSS Modules/global tokens,
+  native fetch, native WebSocket, Lucide React, markdown rendering later, and Vitest/RTL before tests.
+- Added `docs/03-1-frontend-implementation-plan.md` with P0/P1/P2/P3 frontend use cases, backend
+  prerequisites, feature deliverables, typed API strategy, interview state rules, test gates, and
+  the recommended delivery order.
+
+### What Could Not Be Done
+
+- No frontend code, dependency installation, or test tooling was added because the user requested
+  an implementation plan and architecture documentation first.
+- No live PostgreSQL, Redis, SMTP, Gemini, nginx, or WebSocket verification was possible from this
+  documentation pass. The plan records the live-interview verification dependency explicitly.
+- Exact font packages, final token values, router version, and server-state library remain choices
+  for the first frontend implementation slice; the document intentionally avoids locking those
+  without building the first screen and checking the existing runtime constraints.
+
+### Alternatives Considered
+
+- Considered keeping the previous minimal architecture document and adding only a short checklist.
+  Rejected because the frontend now needs explicit auth, API-wrapper, WebSocket, visual, and
+  dependency decisions to avoid re-deriving them during implementation.
+- Considered marking every interview use case P0 solely because backend classes exist. Rejected:
+  the frontend depends on live protocol and browser behavior, so the plan distinguishes available
+  code from a verified frontend-ready contract.
+- Considered adding a state-management or server-state library immediately. Deferred because native
+  hooks and a small auth context cover the MVP, while TanStack Query or a global store should be
+  justified by actual caching and concurrency needs.
+
+## Entry 17 — 2026-08-28 — Align frontend documentation and dependency baseline
+
+### User Prompt (verbatim)
+
+> You mentioned that frontend docs seemed to fall behind backend docs - we need to catch up to frontend, so update to match backend's expectation, just in case you are confused of what to do.
+> Now, come to dependency list. When I researched following your suggestion, I found a detailed dep for each factor:
+> - Routing: react-router-dom
+> - Styling: clsx
+> - HTTP: axios
+> - Server state: @tanstack/react-query
+> - WebSocket: react-use-websocket
+> - Markdown: react-markdown + rehype-santinize
+> - Testing: vitest @testing-library/react + jsdom
+> - Icons: lucide-react.
+> Can you confirm whether this stack is proper for now? If there are anything used in the end, it's better to sacrifice the first-time setup cost for later convenience - no migrations required then.
+> Then, update the stack with detailed deps.
+
+### Assessment
+
+The proposed stack fits the backend contract and the intended frontend scale. `clsx` is a class-name
+composition helper, not a complete styling solution, so CSS Modules and global design tokens remain
+the styling foundation. The markdown package name needs correction from `rehype-santinize` to
+`rehype-sanitize`. React Query is appropriate for the backend's many query/mutation resources, Axios
+supports the required credentials and refresh interceptors, and `react-use-websocket` can contain the
+live interview connection behind a typed adapter. The testing baseline also benefits from
+`@testing-library/user-event` and `@testing-library/jest-dom`.
+
+### What Was Done
+
+- Updated `docs/03-frontend-architecture.md` to describe the backend-aligned API groups, the
+  interim authenticated WebSocket contract, and the selected dependency baseline with package,
+  responsibility, and dependency/devDependency classification.
+- Updated `docs/03-1-frontend-implementation-plan.md` with the detailed dependency setup, Axios
+  refresh coordination, React Query ownership, exact API paths, WebSocket event adapter, and
+  testing configuration.
+- Updated `docs/05-testing-strategies.md` so its frontend guidance matches the selected Vitest,
+  jsdom, Testing Library, Axios, React Query, and WebSocket testing approach.
+
+### What Could Not Be Done
+
+- No packages were installed or added to `fe/package.json`; this prompt requested confirmation and
+  documentation, not implementation. Installation should be the first frontend setup change.
+- No live cookie, nginx, HTTP, or WebSocket verification was performed because the required
+  backend infrastructure and environment values are not configured in this documentation pass.
+- The final font package and exact CSS token values remain implementation choices because they need
+  to be checked against the first rendered responsive screens.
+
+### Alternatives Considered
+
+- Considered retaining native `fetch` and local hooks to minimize MVP dependencies. Rejected because
+  the confirmed backend surface already needs coordinated refresh handling, cache invalidation, and
+  multiple resource queries where Axios and React Query provide durable value.
+- Considered native WebSocket instead of `react-use-websocket`. Rejected for the baseline because
+  reconnect and connection lifecycle behavior are central to the live interview; the library will
+  still be isolated behind a feature adapter.
+- Considered adding only React Testing Library and jsdom. Expanded the baseline with `user-event`
+  and `jest-dom` because realistic form/keyboard interactions and accessible assertions are needed
+  for auth, chat, CV, and interview workflows.
+
 

@@ -1,11 +1,10 @@
 package blackdemise.cp.interview.entity;
 
+import java.time.Instant;
+
 import blackdemise.cp.common.BaseEntity;
-import blackdemise.cp.interview.InterviewPhase;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -18,26 +17,15 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "interview_questions")
-public class InterviewQuestion extends BaseEntity {
-
+@Table(name = "interview_integrity_events")
+public class InterviewIntegrityEvent extends BaseEntity {
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "session_id", nullable = false)
     private InterviewSession session;
-
+    @Column(nullable = false, length = 64)
+    private String eventType;
     @Column(nullable = false)
-    private Integer orderIndex;
-
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String content;
-
-    @Column
-    private String topic;
-
-    @Column
-    private String difficulty;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private InterviewPhase phase;
+    private Instant occurredAt;
+    @Column(columnDefinition = "TEXT")
+    private String metadata;
 }

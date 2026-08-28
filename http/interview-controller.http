@@ -1,0 +1,51 @@
+@baseUrl = http://localhost/api/v1
+@accessToken = replace-with-access-token
+@sessionId = replace-with-session-id
+@questionId = replace-with-question-id
+@roleId = replace-with-role-id
+@levelId = replace-with-level-id
+
+### Load supported roles and levels
+GET {{baseUrl}}/interviews/catalog
+Authorization: Bearer {{accessToken}}
+
+### Load topics for the selected role and level
+GET {{baseUrl}}/interviews/catalog?roleId={{roleId}}&levelId={{levelId}}
+Authorization: Bearer {{accessToken}}
+
+### Create an interview session
+POST {{baseUrl}}/interviews
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "roleId": "replace-with-role-id",
+  "levelId": "replace-with-level-id",
+  "topicIds": [],
+  "durationSeconds": 1800,
+  "minimumPrimaryQuestions": 5,
+  "maximumPrimaryQuestions": 15,
+  "randomPlan": true
+}
+
+### List interviews
+GET {{baseUrl}}/interviews
+Authorization: Bearer {{accessToken}}
+
+### Get an interview
+GET {{baseUrl}}/interviews/{{sessionId}}
+Authorization: Bearer {{accessToken}}
+
+### Start/continue the live interview
+# Connect to ws://localhost/api/v1/interviews/{{sessionId}}/stream?accessToken={{accessToken}}
+# The server sends SESSION_STARTED with the first interviewer message.
+
+### Submit an answer through the WebSocket
+# Send: { "type": "ANSWER_SUBMITTED", "questionId": "{{questionId}}", "answer": { "content": "..." } }
+
+### Record a browser integrity event through the WebSocket
+# Send: { "type": "INTEGRITY_EVENT", "eventType": "FOCUS_LOST", "metadata": "{}" }
+
+### Generate the final report after all questions are answered
+GET {{baseUrl}}/interviews/{{sessionId}}/report
+Authorization: Bearer {{accessToken}}

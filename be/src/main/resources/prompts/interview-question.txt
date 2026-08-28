@@ -1,6 +1,6 @@
-Generate one mock interview question for the following configuration.
+Generate one mock interview question for the following configuration. Respond with JSON only,
+using exactly the fields question, topic, and difficulty. Do not wrap the JSON in markdown.
 
 Role: {{role}}
 Level: {{level}}
-Topic: {{topic}}
-Difficulty: {{difficulty}}
+Interview phase and topic context: {{topic}}

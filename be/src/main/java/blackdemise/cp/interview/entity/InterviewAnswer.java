@@ -1,6 +1,7 @@
 package blackdemise.cp.interview.entity;
 
 import blackdemise.cp.common.BaseEntity;
+import java.time.Instant;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -24,4 +25,10 @@ public class InterviewAnswer extends BaseEntity {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
+
+    @Column(nullable = false)
+    private Instant submittedAt;
+
+    @Column(nullable = false)
+    private boolean timedOut;
 }

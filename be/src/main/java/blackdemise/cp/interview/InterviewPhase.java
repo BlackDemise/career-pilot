@@ -1,12 +1,9 @@
 package blackdemise.cp.interview;
 
-public enum InterviewStatus {
-    SETUP,
-    PREPARING,
+public enum InterviewPhase {
     INTRODUCTION,
     WARM_UP,
     TECHNICAL,
     SITUATIONAL,
-    CLOSING,
-    COMPLETED
+    CLOSING
 }

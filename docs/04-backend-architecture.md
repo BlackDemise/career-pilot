@@ -17,7 +17,7 @@ blackdemise.cp
 ├── user/                   # User entity, Role enum, AuthService/AuthController, auth DTOs
 ├── chat/                   # Conversation, Message: controller/service/repository/dto/entity
 ├── cv/                     # CV, CVAnalysis: controller/service/repository/dto/entity
-├── interview/              # InterviewSession, Question, Answer, Evaluation
+├── interview/              # catalog, session state machine, WebSocket interviewer, report
 └── security/                # RestAuthenticationEntryPoint, RestAccessDeniedHandler
     └── jwt/                 # JwtProperties, JwtTokenProvider, TokenBlacklistService (Redis),
                              # JwtAuthenticationFilter, JwtUserPrincipal, TokenType
@@ -39,6 +39,13 @@ chat/
     └── Message.java
 ```
 
+The mock interview workflow is described in detail in
+[docs/04-1-backend-interview.md](./04-1-backend-interview.md). It is a turn-by-turn AI interviewer,
+not a batch question generator. HTTP is used for catalogs, session creation, session retrieval, and
+the final report. A WebSocket carries interviewer turns, answer submission, timeout notifications,
+integrity events, and lifecycle events. The backend remains authoritative for ownership, state,
+phase transitions, duration, question budgets, and early termination.
+
 ## Reasoning
 
 - **Feature packages over layer-only packages**: keeps everything about "Chat" (or CV, or
@@ -52,6 +59,12 @@ chat/
 - **Strict layering within a feature**: Controller (HTTP concerns, validation) → Service
   (business logic, orchestrates `ai` calls) → Repository (persistence only). DTOs are the only
   types that cross the controller boundary; entities never leave the service/repository layer.
+- **Catalog-driven interview configuration**: roles, levels, topics, compatibility, required topics,
+  and topic selection weights are database-backed. The backend rejects unknown or incompatible
+  values before a session begins; Gemini never validates user configuration.
+- **Live interview orchestration**: Gemini may propose a next question, follow-up, phase transition,
+  or early-ending recommendation, but the backend applies deterministic policy before accepting it.
+  Candidate-facing evaluation is withheld until the interview reaches `COMPLETED`.
 
 ## MVP Entities
 
@@ -61,7 +74,8 @@ Per [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 23:
   response style, technical background, career goal, custom instructions)
 - `Conversation`, `Message`
 - `Cv`, `CvAnalysis`
-- `InterviewSession`, `InterviewQuestion`, `InterviewAnswer`, `InterviewEvaluation`
+- `InterviewRole`, `InterviewLevel`, `InterviewTopic`, and compatibility/plan records
+- `InterviewSession`, `InterviewQuestion`, `InterviewAnswer`, `InterviewEvaluation`, and integrity events
 
 ## Configuration
 
