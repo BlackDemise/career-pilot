@@ -1,0 +1,6 @@
+Generate one mock interview question for the following configuration.
+
+Role: {{role}}
+Level: {{level}}
+Topic: {{topic}}
+Difficulty: {{difficulty}}

@@ -1,0 +1,8 @@
+Compare the CV against the job description below. Respond with a match score, matched skills,
+missing skills, experience gaps, and recommendations.
+
+CV:
+{{cv}}
+
+Job Description:
+{{jd}}

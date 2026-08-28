@@ -139,3 +139,209 @@ Three distinct asks:
   (api/backend/frontend/tests), and per the agent-customization guidance, "one concern per file"
   keeps each instruction focused and avoids loading irrelevant rules into context for unrelated
   file edits.
+
+---
+
+## Entry 3 — 2026-08-27 — Implement Section 0: Shared AI Infrastructure
+
+### User Prompt (verbatim)
+
+> Refer to "docs\02-use-cases.md" and implement #sym:## 0. Shared AI Infrastructure (build first — everything depends on this)
+> Then, I will revise the architecture and adjust if needed (code, docs and instructions) later.
+
+### Assessment
+
+Section 0 of `docs/02-use-cases.md` lists five use cases: 0.1 centralized Gemini AI service
+(model config, temperature, timeout, error handling — P0), 0.2 prompt templates organized by
+workflow and loaded from resources (P0), 0.3 persistence layer with MVP entities (P0), 0.4 basic
+auth / single dev user (P0), and 0.5 streaming/token tracking/retry (P1, out of scope here). Only
+the four P0 items were in scope for this prompt. The codebase had only
+`CareerPilotApplication.java`, so this was greenfield implementation following the package layout
+and rules already agreed in `docs/04-backend-architecture.md` and
+`.github/instructions/backend.instructions.md`.
+
+### What Was Done
+
+- **`ai` package** — centralized Gemini integration:
+  - `AiProperties` (`@ConfigurationProperties(prefix = "ai.gemini")`, record) for model,
+    temperature, max output tokens, timeout, API key.
+  - `GeminiClient` — low-level wrapper around the Gemini `generateContent` REST endpoint using
+    Spring's `RestClient` (no new dependency needed; already available via
+    `spring-boot-starter-webmvc`), with connect/read timeouts from `AiProperties` and error
+    mapping (`ResourceAccessException`/`RestClientException`/non-2xx status) into a new
+    `AiServiceException`.
+  - `AiService` interface + `AiServiceImpl` — the single entry point (`generate(systemPrompt,
+    userPrompt)`) that all features must go through; builds the Gemini request payload
+    (`ai/dto/Gemini*` records: `GeminiRequest`, `GeminiContent`, `GeminiPart`,
+    `GeminiGenerationConfig`, `GeminiResponse`, `GeminiCandidate`) and extracts/validates the
+    response text.
+  - `ai/prompt/PromptTemplateService` — loads prompt templates by name from
+    `src/main/resources/prompts/<name>.txt` and does `{{variable}}` substitution. Added one
+    template file per workflow named in `docs/06-roadmap-scope.md` section 3: `chat-system`,
+    `cv-review`, `cv-jd-analysis`, `interview-question`, `interview-evaluation`,
+    `interview-final-report` — placeholder prompt text with the variables the roadmap already
+    named (`{{user_profile}}`, `{{career_goal}}`, `{{cv}}`, `{{jd}}`, `{{role}}`, `{{level}}`,
+    `{{topic}}`, `{{difficulty}}`, `{{question}}`, `{{answer}}`, `{{interview_summary}}}`).
+- **`common` package** — `BaseEntity` (`@MappedSuperclass`, UUID id + `createdAt`/`updatedAt` via
+  `@CreatedDate`/`@LastModifiedDate`), extended by every entity below. Enabled JPA auditing
+  (`@EnableJpaAuditing`) and configuration-properties scanning (`@ConfigurationPropertiesScan`)
+  on `CareerPilotApplication`.
+- **Persistence layer with MVP entities** (per `docs/04-backend-architecture.md` section "MVP
+  Entities"), entity + repository only (no controllers/services yet — those belong to sections
+  1–3 of the use-cases doc, not section 0):
+  - `user.User` + `UserRepository` (`findByUsername`).
+  - `chat.entity.Conversation`, `chat.entity.Message` (+ `MessageRole` enum) and their
+    repositories.
+  - `cv.entity.Cv`, `cv.entity.CvAnalysis` (+ `CvAnalysisType` enum: `REVIEW`/`JD_MATCH`) and
+    their repositories.
+  - `interview.entity.InterviewSession` (+ `InterviewStatus` enum), `InterviewQuestion`,
+    `InterviewAnswer`, `InterviewEvaluation`, and their repositories.
+- **Basic auth / single dev user** (`security` + `config` packages):
+  - `security.UserDetailsServiceImpl` loads a `User` by username for Spring Security.
+  - `security.DevUserProperties` (`app.dev-user.*`) + `security.DevUserInitializer`
+    (`CommandLineRunner`) seed exactly one dev user on first startup if the `users` table is
+    empty, password BCrypt-encoded.
+  - `config.SecurityConfig` wires `PasswordEncoder` (BCrypt), `DaoAuthenticationProvider`, and a
+    stateless `SecurityFilterChain` requiring HTTP Basic auth on `/api/**` (everything else
+    permitted, since there's nothing else exposed yet).
+- **Configuration** — extended `application.yml` with `ai.gemini.*` and `app.dev-user.*`, all
+  sourced from environment variables with sane local defaults, matching the existing
+  `spring.datasource.*` pattern. Extended `.env.example` with `GEMINI_API_KEY`, `GEMINI_MODEL`,
+  `DEV_USER_USERNAME`, `DEV_USER_PASSWORD`, and passed the same four variables through to the
+  `be` service in `docker-compose.yml`.
+- **Tests** — added `AiServiceImplTest` (mocks `GeminiClient`, asserts text extraction and that
+  `AiServiceException` is thrown on empty candidates) and `PromptTemplateServiceTest` (asserts
+  variable substitution and missing-template error), per the coverage priorities in
+  `docs/05-testing-strategies.md` ("AI prompt-building and response-parsing logic" ranked #1).
+- **Verification** — compiled the backend (`mvnw -DskipTests compile`) and ran the full test
+  suite (`mvnw test`); both succeeded (JDK 21 at `C:\Program Files\Java\jdk-21.0.12.1`, set via
+  `JAVA_HOME` for this session since it wasn't configured in the shell).
+
+### What Could Not Be Done
+
+- Did not implement 0.5 (streaming, token usage tracking, retry-with-limits) — explicitly P1 in
+  `docs/02-use-cases.md`, not part of section 0's P0 scope for this prompt.
+- Did not build any controllers, DTOs, or services for Chat/CV/Interview — persistence (0.3) only
+  covers entities/repositories; the feature workflows themselves are sections 1–3 of the
+  use-cases doc, to be implemented in later prompts.
+- Did not add a global `@ControllerAdvice`/consistent error-response mapping described in
+  `api.instructions.md` — there are no controllers yet to exercise it against, so adding it now
+  would be speculative; `AiServiceException` currently only propagates as an unhandled
+  `RuntimeException` until a controller layer exists to catch and map it.
+- Did not add `spring-boot-starter-validation` (`jakarta.validation`) to `pom.xml` — no DTOs
+  requiring `@Valid` exist yet; will be added alongside the first controller.
+- Did not add a database migration tool (Flyway) — `spring.jpa.hibernate.ddl-auto: update`
+  remains for local dev only, as already documented in `docs/04-backend-architecture.md`; a
+  migration tool is called out there as a prerequisite before anything beyond local/dev data.
+- Could not actually call the real Gemini API to verify `GeminiClient` end-to-end (no API key
+  available in this session, and doing so would also violate the testing instruction to never
+  call the real API in automated tests). Verified request/response handling instead via the
+  mocked-`GeminiClient` unit test.
+
+### Alternatives Considered
+
+- Considered using Spring's reactive `WebClient` (via `spring-boot-starter-webflux`) instead of
+  the blocking `RestClient` for the Gemini call. Rejected: the project uses
+  `spring-boot-starter-webmvc` (servlet stack), streaming/reactive responses are explicitly a P1
+  concern (0.5), and pulling in the reactive stack now for a single blocking call would add a
+  dependency and complexity not justified until streaming is actually implemented.
+- Considered giving `PromptTemplateService` a versioning scheme (`cv-review-v1`, `cv-review-v2`)
+  now. Rejected: `docs/06-roadmap-scope.md` explicitly places prompt versioning in V1, and section
+  0.2 only asks for "organized by workflow, loaded from resources" — added versioning would be
+  unrequested scope creep.
+- Considered seeding the dev user via a `data.sql`/Flyway migration instead of a
+  `CommandLineRunner`. Rejected: no migration tool is in place yet (deliberately, see above), and
+  a `CommandLineRunner` guarded by `count() == 0` is simpler and reversible for a single
+  dev-only user, consistent with "Basic auth / single dev user" rather than a full user
+  management system.
+- Considered placing `UserDetailsServiceImpl`/`DevUserInitializer` inside the `user` package
+  instead of `security`. Rejected in favor of matching
+  `docs/04-backend-architecture.md`'s explicit split: `user/` holds the `User` entity/profile,
+  `security/` holds authentication filters/config.
+
+---
+
+## Entry 4 — 2026-08-27 — Replace hand-rolled Gemini REST client with the official SDK
+
+### User Prompt (verbatim)
+
+> Search online for Google Maven libraries supporting Gemini connnection and use it instead of manually implementing.
+
+### Assessment
+
+Entry 3 implemented `GeminiClient` as a manual `RestClient` wrapper around the raw Gemini
+`generateContent` REST endpoint, with hand-written request/response DTOs
+(`ai/dto/Gemini*`). The user asked to replace this with an official Google-maintained Maven
+library instead of maintaining a custom REST integration. I searched for the official SDK and
+confirmed via the project's GitHub README (`googleapis/java-genai`) and its Javadoc that Google
+publishes `com.google.genai:google-genai` on Maven Central — the official "Google Gen AI Java
+SDK" for both the Gemini Developer API and Vertex/Gemini Enterprise, supporting API-key auth,
+configurable timeouts (`HttpOptions.timeout()`, milliseconds), and a simple
+`client.models.generateContent(model, content, config)` call with a `.text()` accessor on the
+response. This directly replaces the hand-rolled HTTP layer while keeping the same
+`GeminiClient`/`AiService` boundary the rest of the codebase (and `backend.instructions.md`)
+already depends on.
+
+### What Was Done
+
+- Added the dependency to `be/pom.xml`: `com.google.genai:google-genai:1.68.0` (pinned below
+  2.0.0 per the library's own README warning that 2.0.0 will require Java 17+ and change
+  automatic-function-calling behavior — irrelevant here, but pinning avoids an unplanned breaking
+  upgrade).
+- Rewrote `GeminiClient` to wrap `com.google.genai.Client` instead of Spring's `RestClient`:
+  builds the client once from `AiProperties` (API key, timeout via `HttpOptions`), and exposes
+  `generateContent(Content systemInstruction, Content userContent)` which calls
+  `client.models.generateContent(model, userContent, GenerateContentConfig)` (temperature and
+  max-output-tokens still sourced from `AiProperties`, as in Entry 3). SDK exceptions are still
+  caught and wrapped into `AiServiceException`, preserving the existing error-handling contract.
+- Simplified `AiServiceImpl` to build `com.google.genai.types.Content`/`Part` directly (via
+  `Content.fromParts(Part.fromText(...))`) instead of the hand-written `GeminiContent`/`GeminiPart`
+  records, and to read the model's text via the SDK's `GenerateContentResponse.text()` instead of
+  manually walking a `candidates[0].content.parts[0].text` structure.
+- Deleted the now-unused hand-written DTOs: `ai/dto/GeminiRequest.java`, `GeminiContent.java`,
+  `GeminiPart.java`, `GeminiGenerationConfig.java`, `GeminiResponse.java`, `GeminiCandidate.java`
+  (and the now-empty `ai/dto/` folder), since the SDK's own `com.google.genai.types.*` classes
+  replace them.
+- Updated `AiServiceImplTest` to mock `GeminiClient` returning a mocked
+  `com.google.genai.types.GenerateContentResponse` (stubbing `.text()`), instead of constructing
+  the old hand-written response records; both existing test cases (successful generation, blank
+  response → `AiServiceException`) were preserved.
+- Updated `backend.instructions.md` to explicitly require using the official SDK for all Gemini
+  calls and to forbid hand-rolled REST calls to the Gemini API going forward.
+- **Verification** — recompiled the backend (`mvnw -DskipTests compile`) and reran the full test
+  suite (`mvnw test`); both succeeded with the new dependency and implementation.
+- Noted the two files the user said were edited externally between turns
+  (`application.yml`, `docker-compose.yml` — env vars for `ai.gemini.*` lost their local
+  defaults, and `docker-compose.yml` gained explicit per-key env passthroughs and an exposed
+  Postgres port) and left those changes untouched, since they were not part of this prompt and
+  are consistent with the existing configuration pattern.
+
+### What Could Not Be Done
+
+- Did not verify the SDK against a real Gemini API key/live call — no API key is available in
+  this session, and `tests.instructions.md` forbids real network calls in automated tests, so
+  verification is limited to the mocked unit test plus a successful compile.
+- Did not adopt the SDK's streaming (`generateContentStream`) or async (`client.async.models`)
+  APIs — those map to use case 0.5 (streaming/token tracking/retry), which is explicitly P1 and
+  out of scope for this prompt; the SDK does support them when that work is picked up.
+- Did not change the `ai.gemini.*` property names/shape in `application.yml` — the SDK's
+  `AiProperties` inputs (api key, model, temperature, max output tokens, timeout) map cleanly
+  onto the existing config keys, so no config migration was needed.
+
+### Alternatives Considered
+
+- Considered keeping the hand-rolled `RestClient` implementation and only using the SDK's request/
+  response type definitions for type safety. Rejected: the user explicitly asked to use the
+  library "instead of manually implementing," and the SDK's `Client` already handles
+  request/response marshaling, auth, and HTTP concerns end-to-end, so keeping a parallel manual
+  HTTP path would add redundant code for no benefit.
+- Considered pinning to the newest available SDK version without checking for the 2.0.0 breaking-
+  change warning in the README. Rejected: the README explicitly recommends pinning `< 2.0.0` to
+  avoid unexpected breaking updates (Java 17+ requirement and automatic-function-calling changes),
+  so `1.68.0` (latest 1.x at the time of writing) was chosen deliberately.
+- Considered configuring the SDK for Vertex AI / Gemini Enterprise (`.enterprise(true)` with
+  project/location) instead of the Gemini Developer API (API key). Rejected: the project's existing
+  `AiProperties`/`.env.example` design is API-key-based (`GEMINI_API_KEY`), matching the simpler
+  Gemini Developer API path already established in Entry 3; switching to Vertex/Enterprise would
+  require GCP project/service-account setup not currently in scope.
+

@@ -11,6 +11,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql
+    ports: # Keep this for dev convenience
+      - "5432:5432"
     networks:
       - be_net
     healthcheck:
@@ -29,6 +31,13 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://pg:${POSTGRES_PORT}/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+      GEMINI_TEMPERATURE: ${GEMINI_TEMPERATURE}
+      GEMINI_MAX_OUTPUT_TOKENS: ${GEMINI_MAX_OUTPUT_TOKENS}
+      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS}
+      DEV_USER_USERNAME: ${DEV_USER_USERNAME}
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD}
     networks:
       - fe_net
       - be_net

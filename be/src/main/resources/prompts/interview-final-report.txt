@@ -1,0 +1,5 @@
+Summarize the candidate's mock interview performance across all answered questions below.
+Respond with an overall score, strengths, weaknesses, and recommendations.
+
+Interview summary:
+{{interview_summary}}

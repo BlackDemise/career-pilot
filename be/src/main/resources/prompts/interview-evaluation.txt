@@ -1,0 +1,7 @@
+Evaluate the candidate's answer below. Respond with a score, strengths, weaknesses, and feedback.
+
+Question:
+{{question}}
+
+Answer:
+{{answer}}

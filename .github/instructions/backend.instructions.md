@@ -17,6 +17,8 @@ applyTo: "be/**"
   controller boundary.
 - Centralize all Gemini/AI calls behind a single service in an `ai` package. Feature services
   (chat, cv, interview) must call that shared service, never the Gemini API directly.
+- Use the official Google Gen AI Java SDK (`com.google.genai:google-genai`, see `be/pom.xml`) for
+  all Gemini calls via `GeminiClient`; do not hand-roll REST calls to the Gemini API.
 - Store prompt templates as resources organized by workflow (`chat-system`, `cv-review`,
   `cv-jd-analysis`, `interview-question`, `interview-evaluation`, ...) — never as inline string
   literals scattered through Java code.

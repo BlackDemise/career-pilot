@@ -1,0 +1,5 @@
+Review the following CV. Respond with an overall assessment, strengths, weaknesses, and
+recommendations.
+
+CV:
+{{cv}}
