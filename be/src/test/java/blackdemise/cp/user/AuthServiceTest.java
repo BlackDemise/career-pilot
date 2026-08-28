@@ -20,12 +20,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import blackdemise.cp.common.exception.ConflictException;
 import blackdemise.cp.common.exception.UnauthorizedException;
+import blackdemise.cp.common.exception.TooManyRequestsException;
 import blackdemise.cp.security.jwt.IssuedToken;
 import blackdemise.cp.security.jwt.JwtTokenProvider;
 import blackdemise.cp.security.jwt.TokenBlacklistService;
 import blackdemise.cp.security.jwt.TokenType;
 import blackdemise.cp.user.dto.LoginRequest;
+import blackdemise.cp.user.dto.ForgotPasswordRequest;
 import blackdemise.cp.user.dto.RegisterRequest;
+import blackdemise.cp.user.dto.ResetPasswordRequest;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jws;
@@ -36,8 +39,11 @@ class AuthServiceTest {
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final JwtTokenProvider jwtTokenProvider = mock(JwtTokenProvider.class);
     private final TokenBlacklistService tokenBlacklistService = mock(TokenBlacklistService.class);
+        private final EmailTokenService emailTokenService = mock(EmailTokenService.class);
+        private final EmailService emailService = mock(EmailService.class);
     private final AuthService authService =
-            new AuthService(userRepository, passwordEncoder, jwtTokenProvider, tokenBlacklistService);
+            new AuthService(userRepository, passwordEncoder, jwtTokenProvider, tokenBlacklistService,
+                emailTokenService, emailService);
 
     private User existingUser;
 
@@ -58,15 +64,16 @@ class AuthServiceTest {
     }
 
     @Test
-    void register_savesEncodedPasswordAndDefaultRole_whenEmailNotTaken() {
+    void register_sendsVerificationEmail_withoutCreatingUser_whenEmailNotTaken() {
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(emailTokenService.createRegistrationToken(any(EmailVerificationToken.class))).thenReturn("verification-token");
 
-        TokenPair tokens = authService.register(
+        authService.register(
                 new RegisterRequest("New", "User", "new@example.com", "password123"));
 
-        assertThat(tokens.accessToken()).isEqualTo("access-token");
-        verify(userRepository).save(argThatUserHas("new@example.com", "encoded", Role.USER));
+        verify(emailService).sendRegistrationVerification("new@example.com", "verification-token");
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
@@ -77,6 +84,28 @@ class AuthServiceTest {
                 new RegisterRequest("Ada", "Lovelace", "ada@example.com", "password123")))
                 .isInstanceOf(ConflictException.class);
     }
+
+        @Test
+        void register_throwsTooManyRequests_whenResendCooldownIsActive() {
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+        when(emailTokenService.registrationCooldownRemaining("new@example.com"))
+            .thenReturn(Optional.of(java.time.Duration.ofSeconds(30)));
+
+        assertThatThrownBy(() -> authService.register(
+            new RegisterRequest("New", "User", "new@example.com", "Password1!")))
+            .isInstanceOf(TooManyRequestsException.class);
+        }
+
+        @Test
+        void verifyRegistration_createsUserWithPendingHashedPassword() {
+        when(emailTokenService.consumeRegistrationToken("verification-token"))
+            .thenReturn(new EmailVerificationToken("New", "User", "new@example.com", "encoded"));
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+
+        authService.verifyRegistration("verification-token");
+
+        verify(userRepository).save(argThatUserHas("new@example.com", "encoded", Role.USER));
+        }
 
     @Test
     void login_returnsTokens_whenCredentialsMatch() {
@@ -104,6 +133,38 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("ada@example.com", "wrong")))
                 .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void forgotPassword_sendsResetEmailOnlyForKnownEmail() {
+        when(userRepository.findByEmail("ada@example.com")).thenReturn(Optional.of(existingUser));
+        when(emailTokenService.createPasswordResetToken(any(PasswordResetToken.class))).thenReturn("reset-token");
+
+        authService.forgotPassword(new ForgotPasswordRequest("ada@example.com"));
+
+        verify(emailService).sendPasswordReset("ada@example.com", "reset-token");
+    }
+
+    @Test
+    void forgotPassword_doesNotSendEmailForUnknownEmail() {
+        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+
+        authService.forgotPassword(new ForgotPasswordRequest("missing@example.com"));
+
+        verify(emailService, never()).sendPasswordReset(anyString(), anyString());
+    }
+
+    @Test
+    void resetPassword_updatesPasswordAfterConsumingValidToken() {
+        when(emailTokenService.consumePasswordResetToken("reset-token"))
+                .thenReturn(new PasswordResetToken(existingUser.getId(), existingUser.getEmail()));
+        when(userRepository.findById(existingUser.getId())).thenReturn(Optional.of(existingUser));
+        when(passwordEncoder.encode("NewPassword1!")).thenReturn("new-encoded");
+
+        authService.resetPassword(new ResetPasswordRequest("reset-token", "NewPassword1!", "NewPassword1!"));
+
+        assertThat(existingUser.getPassword()).isEqualTo("new-encoded");
+        verify(userRepository).save(existingUser);
     }
 
     @Test

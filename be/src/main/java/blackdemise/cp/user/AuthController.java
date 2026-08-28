@@ -14,10 +14,14 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import blackdemise.cp.common.ApiResponse;
 import blackdemise.cp.security.jwt.JwtProperties;
-import blackdemise.cp.user.dto.AuthResponse;
+import blackdemise.cp.user.dto.EmailRequest;
+import blackdemise.cp.user.dto.ForgotPasswordRequest;
 import blackdemise.cp.user.dto.LoginRequest;
 import blackdemise.cp.user.dto.RegisterRequest;
+import blackdemise.cp.user.dto.ResetPasswordRequest;
+import blackdemise.cp.user.dto.VerifyRegistrationRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,36 +37,75 @@ public class AuthController {
     private final JwtProperties jwtProperties;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletResponse response) {
-        TokenPair tokens = authService.register(request);
-        applyRefreshCookie(response, tokens);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new AuthResponse(tokens.accessToken()));
+    public ResponseEntity<ApiResponse> register(@Valid @RequestBody RegisterRequest request) {
+        authService.register(request);
+        return ResponseEntity.accepted().body(ApiResponse.success(
+                HttpStatus.ACCEPTED.value(), "Check your email to verify your account", null));
+    }
+
+    @PostMapping("/register/resend")
+    public ResponseEntity<ApiResponse> resendRegistration(@Valid @RequestBody EmailRequest request) {
+        authService.resendRegistration(request.email());
+        return ResponseEntity.accepted().body(ApiResponse.success(
+                HttpStatus.ACCEPTED.value(), "A new verification email was sent", null));
+    }
+
+    @PostMapping("/register/verify")
+    public ResponseEntity<ApiResponse> verifyRegistration(
+            @Valid @RequestBody VerifyRegistrationRequest request) {
+        authService.verifyRegistration(request.token());
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(), "Your account is verified. Please log in", null));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+    public ResponseEntity<ApiResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         TokenPair tokens = authService.login(request);
         applyRefreshCookie(response, tokens);
-        return ResponseEntity.ok(new AuthResponse(tokens.accessToken()));
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(), "Login successful", tokens.accessToken()));
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(
+    public ResponseEntity<ApiResponse> refresh(
             @CookieValue(name = "${app.jwt.refresh-cookie.name}", required = false) String refreshToken,
             HttpServletResponse response) {
         TokenPair tokens = authService.refresh(refreshToken);
         applyRefreshCookie(response, tokens);
-        return ResponseEntity.ok(new AuthResponse(tokens.accessToken()));
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(), "Token refreshed successfully", tokens.accessToken()));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(
+    public ResponseEntity<ApiResponse> logout(
             @CookieValue(name = "${app.jwt.refresh-cookie.name}", required = false) String refreshToken,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader,
             HttpServletResponse response) {
         authService.logout(extractBearerToken(authorizationHeader), refreshToken);
         clearRefreshCookie(response);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Logout successful", null));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.accepted().body(ApiResponse.success(
+                HttpStatus.ACCEPTED.value(),
+                "If an account exists for this email, check your inbox for reset instructions", null));
+    }
+
+    @PostMapping("/forgot-password/resend")
+    public ResponseEntity<ApiResponse> resendPasswordReset(@Valid @RequestBody EmailRequest request) {
+        authService.resendPasswordReset(request.email());
+        return ResponseEntity.accepted().body(ApiResponse.success(
+                HttpStatus.ACCEPTED.value(), "A new password reset email was sent", null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(), "Your password was reset. Please log in", null));
     }
 
     private String extractBearerToken(String authorizationHeader) {

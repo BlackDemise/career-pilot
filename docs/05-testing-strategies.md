@@ -9,6 +9,8 @@ applied while writing tests.
 - **Frameworks**: JUnit 5, Mockito, Spring Boot Test (already on the classpath via
   `spring-boot-starter-data-jpa-test`, `spring-boot-starter-security-test`,
   `spring-boot-starter-webmvc-test` in `be/pom.xml`).
+- Every controller and security error response must use `ApiResponse`; tests should assert its
+  timestamp, numeric statusCode, message, and result shape.
 - **Naming convention**: unit tests end in `*Test.java`; integration tests that boot a Spring
   context or touch a real database end in `*IT.java`.
 - **Test types**:
@@ -42,6 +44,19 @@ applied while writing tests.
 3. CV/JD structured-output mapping (match score, missing skills, etc.).
 4. Controller-level validation and error-shape consistency.
 5. Frontend feature hooks/components for Chat, CV Analysis, Mock Interview screens.
+
+## Email Authentication Tests
+
+- Registration must not create a `User` before a valid verification token is consumed.
+- Verification tokens and password-reset tokens must expire after one hour, be single-use, and
+  invalidate the previous link when a resend is sent.
+- Registration and reset requests must enforce a 60-second resend cooldown.
+- Forgot-password requests must return the same public response for known and unknown emails and
+  must not send mail for an unknown email.
+- Password tests must cover the eight-character minimum and uppercase, lowercase, digit, and
+  special-character requirements, as well as password confirmation mismatch.
+- Mock `JavaMailSender` and Redis in unit tests; never send real email or call a real Redis server
+  from the unit suite.
 
 ## Out of Scope for Now
 

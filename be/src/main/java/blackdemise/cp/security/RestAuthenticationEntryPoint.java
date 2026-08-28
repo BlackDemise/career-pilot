@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import tools.jackson.databind.json.JsonMapper;
 
-import blackdemise.cp.common.ErrorResponse;
+import blackdemise.cp.common.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +29,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 jsonMapper.writeValue(
                 response.getWriter(),
-                ErrorResponse.of("UNAUTHORIZED", "Authentication is required to access this resource"));
+                ApiResponse.error(HttpServletResponse.SC_UNAUTHORIZED,
+                    "Authentication is required to access this resource"));
     }
 }

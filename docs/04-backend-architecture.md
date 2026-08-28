@@ -7,7 +7,7 @@ This document describes the package structure of `be/` and the reasoning behind 
 ```
 blackdemise.cp
 ├── CareerPilotApplication.java
-├── common/                 # BaseEntity, ErrorResponse, exception/ (ApiException + subtypes),
+├── common/                 # BaseEntity, ApiResponse, exception/ (ApiException + subtypes),
 │                           # GlobalExceptionHandler
 ├── config/                 # SecurityConfig
 ├── ai/                     # centralized Gemini integration (see below)
@@ -85,11 +85,17 @@ Per [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 23:
   rotates (blacklists) the presented refresh token immediately, even on success.
 - `Role` is `USER` (default, all self-registered accounts) or `ADMIN` (reserved for future
   administrative use; not yet wired to any endpoint restriction).
+- Registration and password recovery use one-time Redis tokens with a one-hour TTL. Raw tokens
+  are sent only in links to frontend routes; Redis stores token hashes and pending data. Resend
+  requests are limited by a 60-second cooldown and invalidate the previous active link.
+- `POST /api/v1/auth/register` does not create a user immediately. Verification creates the
+  `USER` account and returns a success message for frontend redirection to login. Forgot-password
+  requests always return a generic response, including for unknown email addresses.
 
 ## Error Handling
 
 A single `@RestControllerAdvice` (`common.GlobalExceptionHandler`) maps `common.exception.*`
-domain exceptions and validation failures to the consistent error response shape defined in
+domain exceptions and validation failures to the universal `ApiResponse` shape defined in
 [api.instructions.md](../.github/instructions/api.instructions.md); `RestAuthenticationEntryPoint`
 / `RestAccessDeniedHandler` handle the 401/403 cases raised by Spring Security itself (before a
 controller is even reached) in the same shape.

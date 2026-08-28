@@ -61,8 +61,15 @@ See also:
 
 Copy `.env.example` to `.env` at the repo root and fill in:
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`
-- A Gemini API key variable (not yet present in `.env.example` — to be added when Gemini
-  integration is implemented; see [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 2).
+- Gemini settings (`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TEMPERATURE`,
+  `GEMINI_MAX_OUTPUT_TOKENS`, `GEMINI_TIMEOUT_MS`)
+- Redis settings (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`)
+- JWT settings (`JWT_SECRET`, issuer, TTLs, refresh-cookie settings)
+- SMTP settings (`MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, and
+  TLS/auth settings) plus `FRONTEND_BASE_URL` and the verification/reset frontend paths.
+
+The backend sends registration-verification and password-reset links through SMTP. The links are
+valid for one hour, and the pending-email pages allow resending only after a 60-second cooldown.
 
 ### Run the full stack
 

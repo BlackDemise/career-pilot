@@ -5,6 +5,10 @@ This document lists concrete use cases derived from the MVP scope in
 should be implemented. Later phases (V1/V2/Advanced) are noted but not detailed here — see the
 roadmap doc for their full description.
 
+All API endpoints use the `ApiResponse` wrapper with `timestamp`, `statusCode`, `message`, and
+`result`. Business errors set `result` to `null`; validation errors put field messages in
+`result` as a `Map<String, String>`.
+
 Priority legend: **P0** = required for MVP, **P1** = V1, **P2** = V2, **P3** = Advanced (not
 planned unless explicitly requested).
 
@@ -17,6 +21,26 @@ planned unless explicitly requested).
 | 0.3 | Persistence layer (PostgreSQL + JPA + Flyway migrations) with MVP entities (see [04-backend-architecture.md](./04-backend-architecture.md)) | P0 |
 | 0.4 | Auth: register/login by email+password, stateless JWT (access token + httpOnly-cookie refresh token), Redis-backed revocation | P0 |
 | 0.5 | Streaming responses, token usage tracking, retry with limits | P1 |
+
+### Authentication Details
+
+- **Registration**: `POST /api/v1/auth/register` validates the required fields and stores a
+	pending registration in Redis. It sends a frontend link valid for one hour. The account is
+	created only when the link is verified through `POST /api/v1/auth/register/verify`; successful
+	verification redirects the user to login rather than issuing tokens automatically.
+- **Registration resend**: `POST /api/v1/auth/register/resend` is available from the pending
+	registration page only. A new email may be requested after a 60-second cooldown. The latest
+	link invalidates the previous link and remains valid for one hour.
+- **Forgot password**: `POST /api/v1/auth/forgot-password` sends a one-hour frontend reset link
+	when the email belongs to an account and always returns the same generic response otherwise.
+- **Password reset resend**: `POST /api/v1/auth/forgot-password/resend` is available from the
+	pending reset page only, after the same 60-second cooldown; the latest link invalidates the
+	previous link.
+- **Password reset**: `POST /api/v1/auth/reset-password` requires a valid one-time link token,
+	a matching password confirmation, and the shared password complexity rule. Existing access
+	tokens are not revoked immediately; they expire within their normal 15-minute maximum.
+- **Password rule**: passwords require at least 8 characters, one uppercase letter, one
+	lowercase letter, one digit, and one special character.
 
 ## 1. AI Chat
 

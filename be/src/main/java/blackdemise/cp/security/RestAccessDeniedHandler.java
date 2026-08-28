@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import tools.jackson.databind.json.JsonMapper;
 
-import blackdemise.cp.common.ErrorResponse;
+import blackdemise.cp.common.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +28,7 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 jsonMapper.writeValue(
                 response.getWriter(),
-                ErrorResponse.of("FORBIDDEN", "You do not have access to this resource"));
+                ApiResponse.error(HttpServletResponse.SC_FORBIDDEN,
+                    "You do not have access to this resource"));
     }
 }

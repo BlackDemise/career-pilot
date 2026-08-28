@@ -10,8 +10,9 @@ applyTo: ["be/**/controller/**", "be/**/dto/**", "fe/**/api/**"]
   only for breaking changes, keeping the old version alive until clients migrate.
 - Use plural, resource-based paths: `/api/v1/conversations`, `/api/v1/cvs`, `/api/v1/interviews`
   — not verb-based paths like `/api/v1/getConversation`. The auth endpoints
-  (`/api/v1/auth/register|login|refresh|logout`) are the one deliberate exception, since they
-  represent actions rather than resources.
+  (`/api/v1/auth/register|register/verify|register/resend|login|refresh|logout|forgot-password|
+  forgot-password/resend|reset-password`) are the deliberate exceptions, since they represent
+  authentication actions rather than resources.
 - `/api/v1/auth/**` is the only publicly reachable (unauthenticated) group; every other
   `/api/v1/**` route requires a valid, non-blacklisted JWT access token (see
   `JwtAuthenticationFilter`).
@@ -19,8 +20,11 @@ applyTo: ["be/**/controller/**", "be/**/dto/**", "fe/**/api/**"]
 - Structured AI outputs (CV review, CV/JD match, interview evaluation, etc.) must be returned as
   typed DTOs matching the structures described in
   [docs/06-roadmap-scope.md](../../docs/06-roadmap-scope.md), never as raw model text.
-- Error responses use one consistent shape across the API:
-  `{ "error": { "code": "...", "message": "..." } }`, produced by a global exception handler.
+- Every endpoint returns the same wrapper:
+  `{ "timestamp": 0, "statusCode": 200, "message": "...", "result": null }`.
+  Normal responses put their payload in `result`; business errors use `result: null`; validation
+  errors use a general message and put a `Map<String, String>` of field errors in `result`.
+  The timestamp is epoch seconds and `statusCode` is the numeric HTTP status.
 - Use standard HTTP status codes: 200/201 success, 400 validation error, 401/403 auth, 404 not
   found, 500 unexpected error.
 - When a DTO shape changes, update both the `be/` DTO and the corresponding `fe/` API type in

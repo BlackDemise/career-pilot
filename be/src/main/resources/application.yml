@@ -17,6 +17,17 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD}
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE}
 
 ai:
   gemini:
@@ -27,6 +38,11 @@ ai:
     timeout-ms: ${GEMINI_TIMEOUT_MS}
 
 app:
+  email:
+    from: ${MAIL_FROM}
+    frontend-base-url: ${FRONTEND_BASE_URL}
+    registration-path: ${REGISTRATION_VERIFICATION_PATH}
+    password-reset-path: ${PASSWORD_RESET_PATH}
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER}

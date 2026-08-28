@@ -473,6 +473,98 @@ Before touching any code, I read `pom.xml` (confirmed `jjwt-api/impl/jackson`, `
 
 ---
 
+## Entry 7 — 2026-08-28 — Email registration verification and password reset
+
+### User Prompt (verbatim)
+
+> 1. **Forgot-password policy**: Go with short approach cooldown. Just note that, frontend page needs to specify this so that users don't close the page while the mail hasn't arrived yet - only on that page do we offer resending.
+> 2. **Registration verification success**: I suppose we go with login redirection.
+> 3. **Verification link format**: We target a frontend route with a token which that page can use to call backend to verify.
+> 4. **Email provider/configuration**: Yes, add placeholders. Actual value will be filled later.
+> 5. **Password reset token effect on existing access tokens**: For now, go with current maximum 15-minute access-token lifetime.
+
+### Assessment
+
+The existing `/api/v1/auth/register` created a user and issued JWTs immediately. There was no
+email verification, resend workflow, password recovery, mail service, or temporary-token storage.
+The user confirmed the short-cooldown design, frontend-targeted links, login redirection after
+verification, SMTP placeholders, and the existing 15-minute access-token behavior after a reset.
+I selected a 60-second resend cooldown, one active token per email, a one-hour token TTL, and
+single-use tokens. The pending-email pages are the only frontend surfaces that should offer
+resend, while initial forgot-password responses remain generic to prevent email enumeration.
+
+### What Was Done
+
+- Replaced immediate registration with a pending registration stored in Redis. The password is
+  BCrypt-hashed before it is stored in the pending value. A verification email contains a token
+  link to the configured frontend route; only `POST /api/v1/auth/register/verify` creates the
+  `USER` row. Successful verification returns a message instructing the frontend to redirect to
+  login and does not issue JWTs.
+- Added `POST /api/v1/auth/register/resend`. It is intended for the pending-registration page,
+  enforces a 60-second cooldown, invalidates the previous active token, and issues a fresh link
+  valid for one hour.
+- Added `POST /api/v1/auth/forgot-password`. It always returns the same generic response whether
+  the email exists or not. For a known email, it stores a one-hour reset token in Redis and sends
+  the configured frontend reset link. Requests during the cooldown do not send another email.
+- Added `POST /api/v1/auth/forgot-password/resend` for the pending-reset page, with the same
+  60-second cooldown and latest-link-wins behavior. It also silently succeeds for emails with no
+  pending reset to avoid account enumeration.
+- Added `POST /api/v1/auth/reset-password`. It consumes the reset token once, validates matching
+  passwords, updates the BCrypt password, and leaves existing access tokens valid until their
+  normal maximum 15-minute expiry, as requested.
+- Added shared `EmailTokenService`: raw tokens are generated with `SecureRandom`, only SHA-256
+  token hashes are used as Redis keys, pending payloads are JSON-serialized through Jackson 3
+  `JsonMapper`, and Redis TTLs remove expired values without a scheduler.
+- Added `EmailService` using the existing Spring Boot mail starter and `JavaMailSender`; links
+  are built from `FRONTEND_BASE_URL`, `REGISTRATION_VERIFICATION_PATH`, and `PASSWORD_RESET_PATH`.
+- Added `EmailProperties`, password complexity validation to registration and reset DTOs
+  (minimum 8 characters, uppercase, lowercase, digit, special character), `EmailRequest`,
+  verification/reset request DTOs, `MessageResponse`, and `BadRequestException`/
+  `TooManyRequestsException`.
+- Added SMTP and frontend-link placeholders to `application.yml`, `.env.example`, and the
+  backend environment in `docker-compose.yml`.
+- Updated API, frontend architecture, backend architecture, use-case, introduction, and testing
+  strategy documentation to describe the new flows and pending-email-page cooldown behavior.
+- Updated `AuthServiceTest` with registration, verification, resend cooldown, forgot-password,
+  and reset-password coverage. A clean test run passed 23 tests with zero failures/errors.
+
+### What Could Not Be Done
+
+- Could not send a real verification or reset email because SMTP values are intentionally blank
+  placeholders until the user supplies an email provider configuration. `JavaMailSender` is
+  mocked by the unit tests.
+- Could not run the full application against live PostgreSQL and Redis because the required
+  environment values and services are not configured in this session. Compilation and unit tests
+  pass without those external services.
+- Did not implement frontend pages or the frontend HTTP interceptor. The frontend remains a Vite
+  scaffold; the documentation now specifies the required routes, pending-email resend behavior,
+  login redirect, and token query-parameter contract for the subsequent frontend implementation.
+- Did not revoke already-issued access tokens immediately after password reset. This was an
+  explicit user decision to accept the current maximum 15-minute access-token lifetime.
+- Did not add a scheduled cooldown cleanup task. Redis TTL handles cleanup automatically, and
+  adding a scheduler would be unnecessary.
+
+### Alternatives Considered
+
+- Considered allowing unlimited forgot-password requests. Rejected because repeated requests can
+  flood a user's mailbox and create an abuse vector. The selected design permits resend only from
+  the pending page after 60 seconds, with one active one-hour token at a time.
+- Considered blocking all new forgot-password requests for the complete one-hour token TTL.
+  Rejected because a lost or delayed email would strand the user; the 60-second cooldown provides
+  abuse resistance while preserving a usable resend flow.
+- Considered returning a JWT immediately after registration verification. Rejected because the
+  user explicitly preferred redirection to the login page.
+- Considered links targeting backend endpoints. Rejected because the user explicitly requested
+  frontend routes that extract the token and call the backend verification/reset API.
+- Considered storing pending registrations and reset tokens in PostgreSQL. Rejected because these
+  are short-lived values and Redis already provides the required TTL behavior without expanding
+  the relational schema or adding cleanup work.
+- Considered invalidating every access token after password reset through a user token-version
+  check. Deferred because it would require a per-request database/Redis check and the user chose
+  the existing 15-minute access-token maximum for now.
+
+---
+
 ## Entry 6 — 2026-08-28 — Migrate Spring Boot 4 JSON handlers to JsonMapper
 
 ### User Prompt (verbatim)
@@ -516,5 +608,78 @@ both in the security handlers that serialize 401 and 403 API errors.
 - Considered defining a custom `JsonMapper` bean. Rejected because these handlers only need the
   auto-configured mapper and do not customize serialization; constructor injection of the
   existing Boot-managed `JsonMapper` is the smallest correct change.
+
+---
+
+## Entry 8 — 2026-08-28 — Standardize every API response with ApiResponse
+
+### User Prompt (verbatim)
+
+> Standardize this before moving on further: API response.
+> We need an API response wrapper like this: ApiResponse(int timestamp, int statusCode, String message, Object result) - all endpoints must return this wrapper.
+> There are three main cases:
+> 1. Normal response: it returns normally.
+> 2. Business error happens: result=null, message can contain the error description itself.
+> 3. Validation error happens: message will tell the general error and result will hold a Map<String, String> where a key describes a field, a corresponding value will describe why that field fails validation.
+> Scan all endpoints to see and align all endpoints following this standard. Later on, all endpoints must be following that, not only this AuthController.
+
+### Assessment
+
+The current backend has one controller, `AuthController`, plus two Spring Security handlers and a
+global exception handler. Controller success responses used separate `AuthResponse` and
+`MessageResponse` records, while business/security failures used a nested `ErrorResponse` shape.
+This did not satisfy the requested universal contract. I selected a shared `ApiResponse` record at
+the `common` boundary, with epoch-seconds `timestamp`, numeric HTTP `statusCode`, `message`, and
+`Object result`. Since there are no other controllers yet, standardizing the common exception and
+security handlers establishes the rule for future endpoints as well.
+
+### What Was Done
+
+- Added `common.ApiResponse(int timestamp, int statusCode, String message, Object result)` with
+  factories for normal responses, business errors, and validation errors.
+- Converted every `AuthController` endpoint to return `ResponseEntity<ApiResponse>`:
+  registration, resend-registration, registration verification, login, refresh, logout,
+  forgot-password, resend-password-reset, and reset-password.
+- Normal success payloads now live in `result` (the access token for login/refresh); message-only
+  operations use `result: null`.
+- Changed logout from an empty `204 No Content` response to a wrapped `200 OK` response, because
+  every endpoint must return the wrapper.
+- Replaced the old `ErrorResponse` type and removed obsolete `AuthResponse` and `MessageResponse`
+  DTOs.
+- Updated `GlobalExceptionHandler`: business/domain errors return the HTTP status and description
+  with `result: null`; validation errors return `message: "Validation failed"` and a
+  `Map<String, String>` in `result`; unexpected errors use the same wrapper with a generic
+  message.
+- Updated `RestAuthenticationEntryPoint` and `RestAccessDeniedHandler` to serialize `ApiResponse`
+  using the existing Jackson 3 `JsonMapper` migration.
+- Updated API, backend architecture, frontend architecture, use-case, and testing documentation
+  to require and describe the universal wrapper, including the validation map.
+- Scanned all current endpoints and confirmed `AuthController` is the only controller. Future
+  controllers must return `ApiResponse` according to `.github/instructions/api.instructions.md`.
+- Verification: clean backend test run passed 23 tests with zero failures/errors and
+  `BUILD SUCCESS`; workspace error scan found no errors.
+
+### What Could Not Be Done
+
+- No future feature controllers exist yet, so there were no Chat, CV, or Interview endpoints to
+  convert. The API instruction now makes `ApiResponse` mandatory for them when implemented.
+- No live HTTP request was made against the controller/security handlers because the application
+  requires configured PostgreSQL, Redis, JWT, SMTP, and Flyway seed values to start. Compile,
+  source error scan, and the existing unit suite completed successfully.
+- No frontend API types or client were changed because the frontend is still a Vite scaffold with
+  no API layer. The frontend architecture documentation now identifies the wrapper as the shared
+  client contract.
+
+### Alternatives Considered
+
+- Considered retaining `ErrorResponse` for errors and using `ApiResponse` only for successful
+  controller results. Rejected because the request explicitly requires all three cases and all
+  endpoints to use one wrapper.
+- Considered making `timestamp` a `long` to avoid epoch-second overflow in 2038. Kept the requested
+  `int` constructor shape exactly; the factory currently supplies epoch seconds.
+- Considered preserving logout's `204 No Content`. Rejected because a 204 response cannot carry
+  the required wrapper body; logout now returns wrapped `200 OK`.
+- Considered putting field validation errors into the message string. Rejected because the request
+  explicitly requires `result` to hold a `Map<String, String>` for validation failures.
 
 

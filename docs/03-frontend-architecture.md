@@ -38,6 +38,10 @@ fe/src/
 └── config/                   # env var access, constants
 ```
 
+The auth feature should be added under `features/auth/` with registration, verification,
+login, forgot-password, pending-email, and reset-password pages. Verification and reset links
+target frontend routes and pass their `token` query parameter to the backend API.
+
 ## Reasoning
 
 - **Feature-based over layer-based**: Chat, CV Analysis, and Mock Interview are the three
@@ -47,9 +51,17 @@ fe/src/
 - **`shared/` is intentionally small**: only code genuinely reused across features belongs here.
   Anything feature-specific stays inside that feature's folder to avoid premature abstraction.
 - **Single API client**: all HTTP calls are funneled through `shared/api/`, which wraps `fetch`
-  and centralizes base URL (`/api`), error parsing (matching the error shape in
+  and centralizes base URL (`/api`), error parsing (matching the `ApiResponse` shape in
   [api.instructions.md](../.github/instructions/api.instructions.md)), and auth headers once
   authentication exists. Feature `api.ts` files only define feature-specific endpoint calls.
+- **Auth request behavior**: the shared client stores only the access token in localStorage. A
+  401 triggers one request to `/api/v1/auth/refresh`, which uses the backend-managed httpOnly
+  refresh cookie, then retries the original request once. A second 401 clears local auth and
+  redirects to login. A 403 renders the forbidden page. The client must not read, store, or
+  decode the refresh cookie.
+- **Pending email pages**: after registration or forgot-password submission, keep the user on a
+  pending-email page while delivery is expected. Only that page offers resend, shows the
+  60-second cooldown, and prevents accidental duplicate requests.
 - **No premature routing/state library**: the MVP scope (three screens: Chat, CV, Interview)
   does not need a heavy router or global state library. Start with whatever minimal routing
   approach fits (even simple conditional rendering), and only introduce a router/state library
