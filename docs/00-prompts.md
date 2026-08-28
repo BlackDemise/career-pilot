@@ -1167,4 +1167,111 @@ live interview connection behind a typed adapter. The testing baseline also bene
   and `jest-dom` because realistic form/keyboard interactions and accessible assertions are needed
   for auth, chat, CV, and interview workflows.
 
+## Entry 18 — 2026-08-28 — Implement frontend baseline and authentication foundation
+
+### User Prompt (verbatim)
+
+> Okay, with that in mind, start with two sections: ## 0. Baseline Dependencies and ## 1. Foundation and Authentication.
+> When you need to install deps, ask the command and I will approve.
+>
+> Hmm, for now, abort the deps installation - I will install them later, give me the command.
+> Please focus on implementation where we left off.
+
+### Assessment
+
+The request started frontend implementation for the dependency baseline and authentication section.
+Dependency installation was approved initially but then cancelled by the user. The implementation
+could therefore proceed by recording the dependency manifest and building against the documented
+contracts, while leaving installation and lockfile generation to the user. The auth slice needs the
+backend's `/api/v1/auth/**` endpoints, access-token storage only in the browser, backend-managed
+httpOnly refresh-cookie handling, one refresh-and-retry policy for 401 responses, and protected
+routes for the eventual chat, CV, interview, and profile screens.
+
+### What Was Done
+
+- Added the agreed runtime and development dependency versions to `fe/package.json` without running
+  another installation after cancellation.
+- Added shared `ApiResponse<Result>` and `ApiError` types.
+- Added access-token storage, claims decoding for display data, expiry checks, and clear-session
+  helpers in `shared/api/authSession.ts`.
+- Added the shared Axios client with `/api/v1` base URL, credentials, bearer headers, wrapper
+  parsing, validation-map errors, concurrent refresh coordination, one retry, and login redirect
+  after refresh failure.
+- Added typed authentication API methods for login, registration, verification, resend, recovery,
+  reset, and logout.
+- Added React Query and auth providers, route guards, public auth routes, pending-email pages with
+  the 60-second resend cooldown, verification redirect, password reset, and an authenticated shell.
+- Added the first responsive visual system with editorial typography, teal/charcoal/coral/mint/
+  yellow tokens, navigation, form states, focus styles, and reduced-motion handling.
+- Added a Vite `/api` development proxy.
+- Removed the accidental root-level npm manifest, lockfile, and ignore-file addition created when
+  the first approved command ran from the repository root instead of `fe/`.
+
+### What Could Not Be Done
+
+- Packages were not installed after the user cancelled installation. The frontend build cannot
+  resolve the new imports until dependencies are installed from `fe/`.
+- Chat, CV, profile, and interview screens remain route placeholders; this turn focused on the
+  shared foundation and authentication section.
+- No live backend, cookie, SMTP, Redis, nginx, or WebSocket verification was possible.
+
+### Alternatives Considered
+
+- Considered changing PowerShell execution policy to run `npm`; rejected because using `npm.cmd`
+  is sufficient and does not alter machine policy.
+- Considered removing the dependency entries because installation was cancelled. Kept them in
+  `fe/package.json` so the later setup command is reproducible and the source has an explicit
+  dependency contract.
+- Considered storing the refresh token in localStorage for simpler frontend code. Rejected because
+  the backend contract requires an httpOnly cookie that JavaScript cannot read.
+
+## Entry 19 — 2026-08-28 — Continue frontend authentication implementation without installing dependencies
+
+### User Prompt (verbatim)
+
+> Hmm, for now, abort the deps installation - I will install them later, give me the command.
+> Please focus on implementation where we left off.
+
+### Assessment
+
+The user cancelled dependency installation and requested continuation of the implementation. The
+frontend source can be completed and linted independently, but TypeScript bundling cannot resolve
+third-party imports until the dependencies are installed under `fe/`. The implementation therefore
+keeps the approved dependency manifest, removes accidental root-level npm artifacts, and focuses on
+the shared API/session boundary and Section 1 authentication routes.
+
+### What Was Done
+
+- Added the approved dependency entries to `fe/package.json` without installing them again.
+- Removed the accidental root-level `package.json` and `package-lock.json` created by the earlier
+  command running from the repository root.
+- Implemented typed `ApiResponse`/`ApiError` handling and an Axios client with bearer headers,
+  credentials, one refresh-and-retry flow, concurrent refresh coordination, and login redirect.
+- Implemented access-token storage and expiry/claims helpers; the refresh token remains backend-
+  managed and inaccessible to JavaScript.
+- Implemented auth API methods for login, registration, verification, resend, password recovery,
+  password reset, and logout.
+- Implemented React Query and auth providers, public auth routes, protected routes, pending-email
+  flows with the 60-second cooldown, verification redirect, reset page, and authenticated shell.
+- Added responsive visual styling, design tokens, navigation, accessible form states, icons, and a
+  Vite `/api` development proxy.
+- Repaired strict TypeScript and ESLint issues in auth imports, provider exports, verification
+  effects, and successful null-result API operations.
+
+### What Could Not Be Done
+
+- Dependencies were not installed after cancellation. The exact later command is:
+  `cd fe; npm.cmd install; npm.cmd install -D vitest jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom`.
+- A full `npm run build` could not pass because `fe/node_modules` is absent; unresolved package
+  imports are expected until the later install. Frontend ESLint passes.
+- Chat, CV, profile, and interview screens remain placeholders for the next implementation slices.
+- No live backend, cookie, SMTP, Redis, nginx, or WebSocket verification was possible.
+
+### Alternatives Considered
+
+- Considered changing PowerShell execution policy to run npm. Rejected because `npm.cmd` is the
+  correct Windows shim and does not alter machine policy.
+- Considered removing dependency declarations when installation was cancelled. Kept them in the
+  frontend manifest so the source and later setup command share one reproducible contract.
+
 
