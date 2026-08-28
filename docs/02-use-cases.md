@@ -61,10 +61,10 @@ planned unless explicitly requested).
 
 | # | Use Case | Priority | Completed? |
 |---|----------|----------|------------|
-| 2.1 | User uploads a PDF CV | P0 | No |
-| 2.2 | System extracts text from the CV | P0 | No |
-| 2.3 | User requests a CV Review; system returns overall assessment, strengths, weaknesses, recommendations | P0 | No |
-| 2.4 | User submits a CV + JD pair; system returns match score, matched/missing skills, experience gaps, recommendations | P0 | No |
+| 2.1 | User uploads a PDF CV | P0 | Yes |
+| 2.2 | System extracts text from the CV | P0 | Yes |
+| 2.3 | User requests a CV Review; system returns overall assessment, strengths, weaknesses, recommendations | P0 | Yes |
+| 2.4 | User submits a CV + JD pair; system returns match score, matched/missing skills, experience gaps, recommendations | P0 | Yes |
 | 2.5 | DOCX/TXT support, structured CV extraction (education/experience/projects/skills sections) | P1 | No |
 | 2.6 | Section-level scoring, requirement categorization (required/preferred/optional) | P1 | No |
 | 2.7 | Evidence mapping (JD requirement → CV proof, with confidence), ATS-oriented analysis | P2 | No |

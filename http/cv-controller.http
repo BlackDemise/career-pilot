@@ -1,0 +1,32 @@
+@baseUrl = http://localhost/api/v1
+@accessToken = eyJhbGciOiJIUzUxMiJ9.eyJqdGkiOiJlOWU0NjFkNi0zYTc3LTQyMWEtOTZmZC0yZmM3NDU3YjQ5MzQiLCJzdWIiOiIwMzNmZDVhZS00ZGI4LTRjOTUtYTc2Mi0zOTQyYWYyZDU1MDAiLCJpc3MiOiJDYXJlZXJQaWxvdCIsImlhdCI6MTc4NzkwMjY4NiwiZXhwIjoxNzg3OTAzNTg2LCJ0eXAiOiJBQ0NFU1MiLCJlbWFpbCI6Im5ncGhAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiTmciLCJsYXN0TmFtZSI6IlBoIiwicm9sZSI6IkFETUlOIn0.hwW40z5-XmJI7qD_PiVKmqiQ8rsvV9uV9-pWvUyQHUtltozLqNlxMtF2WYCztjIyhoekiHReSdZhopk7qrcfyQ
+@cvId = 90560536-c28a-46ad-9f4a-b759e623b787
+
+### Upload a PDF CV
+POST {{baseUrl}}/cvs
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=CareerPilotBoundary
+
+--CareerPilotBoundary
+Content-Disposition: form-data; name="file"; filename="BlackDemise.pdf"
+Content-Type: application/pdf
+
+< D:\pets\career-pilot\sample-cvs\BlackDemise.pdf
+--CareerPilotBoundary--
+
+### Request a CV review
+POST {{baseUrl}}/cvs/{{cvId}}/analyses/review
+Authorization: Bearer {{accessToken}}
+
+### Compare a CV with a job description
+POST {{baseUrl}}/cvs/{{cvId}}/analyses/jd-match
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "jobDescription": "Python backend engineer with MongoDB hand-on experiences"
+}
+
+### List analyses for a CV
+GET {{baseUrl}}/cvs/{{cvId}}/analyses
+Authorization: Bearer {{accessToken}}

@@ -565,6 +565,56 @@ resend, while initial forgot-password responses remain generic to prevent email 
 
 ---
 
+## Entry 12 — 2026-08-28 — Implement P0 CV Analysis
+
+### User Prompt (verbatim)
+
+> Read all documents in "docs" and all instructions in ".github" to understand what we need to do and how we should do that.
+> Refer to "docs\\02-use-cases.md": we are going to implement tasks in "CV Analysis" section with P0 priority.
+> Understand the implementation scope, read relevant setup in "be" codebase, and implement it.
+> In case we need a PDF Maven dep, let me know what to add, and I will add it for you.
+
+### Assessment
+
+The P0 CV workflow required PDF upload, text extraction, CV review, and CV-to-job-description
+matching. The existing CV and CV analysis entities/repositories and centralized AI service were
+usable, but the feature had no controller, service, DTOs, or structured result handling. PDF text
+extraction requires Apache PDFBox; the user added `org.apache.pdfbox:pdfbox:3.0.8` to `be/pom.xml`.
+
+### What Was Done
+
+- Added `CvController` endpoints for PDF upload, CV review, JD matching, and analysis history under
+  `/api/v1/cvs`.
+- Added `CvService` with PDF validation, a 5 MB configurable default size limit, filename
+  sanitization, PDFBox text extraction, authenticated-user ownership checks, prompt rendering,
+  Jackson 3 JSON parsing, and persisted analysis results.
+- Added typed DTOs for CV responses, review results, JD-match requests/results, and analysis
+  responses. AI results are returned as structured objects rather than raw model text.
+- Updated the CV prompt resources to require JSON output and an integer match score from 0 to 100.
+- Added focused `CvServiceTest` coverage for PDF extraction, typed JD-match parsing/persistence,
+  and cross-user isolation.
+- Added successful REST Client examples in `http/cv-controller.http`, configured
+  `CV_MAX_FILE_SIZE_BYTES`, and marked CV P0 use cases 2.1 through 2.4 complete.
+
+### What Could Not Be Done
+
+- Scanned PDFs and OCR remain out of scope; PDFBox extracts embedded text only.
+- DOCX/TXT support, structured CV section extraction, section scoring, evidence mapping, ATS
+  analysis, and CV rewriting remain their documented V1/P2/P3 items.
+- No live PostgreSQL, Gemini, or HTTP integration test was run because those services and values
+  are not configured in this environment.
+
+### Alternatives Considered
+
+- Considered parsing PDFs without a dependency. Rejected because the JDK and Spring do not provide
+  a PDF text parser; PDFBox is the focused dependency already accepted by the user.
+- Considered storing raw AI text. Rejected because the API contract requires typed structured AI
+  outputs; JSON is parsed before persistence and response mapping.
+- Considered exposing analyses without ownership filtering. Rejected because every authenticated
+  resource must be isolated by the JWT user's UUID.
+
+---
+
 ## Entry 6 — 2026-08-28 — Migrate Spring Boot 4 JSON handlers to JsonMapper
 
 ### User Prompt (verbatim)

@@ -38,6 +38,8 @@ ai:
     timeout-ms: ${GEMINI_TIMEOUT_MS}
 
 app:
+  cv:
+    max-file-size-bytes: ${CV_MAX_FILE_SIZE_BYTES:5242880}
   email:
     from: ${MAIL_FROM}
     frontend-base-url: ${FRONTEND_BASE_URL}

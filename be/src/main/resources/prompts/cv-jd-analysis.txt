@@ -1,5 +1,6 @@
-Compare the CV against the job description below. Respond with a match score, matched skills,
-missing skills, experience gaps, and recommendations.
+Compare the CV against the job description below. Return only valid JSON matching this schema:
+{"matchScore":0,"matchedSkills":["string"],"missingSkills":["string"],"experienceGaps":["string"],"recommendations":["string"]}
+The matchScore must be an integer from 0 to 100. Do not wrap the JSON in Markdown code fences.
 
 CV:
 {{cv}}
