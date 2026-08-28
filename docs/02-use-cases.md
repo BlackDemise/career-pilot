@@ -14,8 +14,8 @@ planned unless explicitly requested).
 |---|----------|----------|
 | 0.1 | Centralized Gemini AI service (model config, temperature, timeout, error handling) | P0 |
 | 0.2 | Prompt templates organized by workflow, loaded from resources (not hardcoded) | P0 |
-| 0.3 | Persistence layer (PostgreSQL + JPA) with MVP entities (see [04-backend-architecture.md](./04-backend-architecture.md)) | P0 |
-| 0.4 | Basic auth / single dev user | P0 |
+| 0.3 | Persistence layer (PostgreSQL + JPA + Flyway migrations) with MVP entities (see [04-backend-architecture.md](./04-backend-architecture.md)) | P0 |
+| 0.4 | Auth: register/login by email+password, stateless JWT (access token + httpOnly-cookie refresh token), Redis-backed revocation | P0 |
 | 0.5 | Streaming responses, token usage tracking, retry with limits | P1 |
 
 ## 1. AI Chat

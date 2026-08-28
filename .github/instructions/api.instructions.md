@@ -5,10 +5,16 @@ applyTo: ["be/**/controller/**", "be/**/dto/**", "fe/**/api/**"]
 
 # API Contract Instructions
 
-- All backend endpoints are exposed under `/api/**` (see `nginx/nginx.conf` routing). Do not
-  add routes outside this prefix.
-- Use plural, resource-based paths: `/api/conversations`, `/api/cvs`, `/api/interviews` — not
-  verb-based paths like `/api/getConversation`.
+- All backend endpoints are exposed under `/api/v1/**` (see `nginx/nginx.conf` routing, which
+  proxies the whole `/api/` prefix). Do not add routes outside this prefix; bump to `/api/v2/**`
+  only for breaking changes, keeping the old version alive until clients migrate.
+- Use plural, resource-based paths: `/api/v1/conversations`, `/api/v1/cvs`, `/api/v1/interviews`
+  — not verb-based paths like `/api/v1/getConversation`. The auth endpoints
+  (`/api/v1/auth/register|login|refresh|logout`) are the one deliberate exception, since they
+  represent actions rather than resources.
+- `/api/v1/auth/**` is the only publicly reachable (unauthenticated) group; every other
+  `/api/v1/**` route requires a valid, non-blacklisted JWT access token (see
+  `JwtAuthenticationFilter`).
 - Request/response bodies are JSON with camelCase field names on both frontend and backend.
 - Structured AI outputs (CV review, CV/JD match, interview evaluation, etc.) must be returned as
   typed DTOs matching the structures described in

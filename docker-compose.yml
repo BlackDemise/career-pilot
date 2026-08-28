@@ -1,5 +1,3 @@
-# Used for local development only. Do not reintroduce this on production :)
-
 services:
   pg:
     image: pgvector/pgvector:pg18-trixie
@@ -21,6 +19,19 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    networks:
+      - be_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   be:
     build:
       context: ./be
@@ -36,13 +47,26 @@ services:
       GEMINI_TEMPERATURE: ${GEMINI_TEMPERATURE}
       GEMINI_MAX_OUTPUT_TOKENS: ${GEMINI_MAX_OUTPUT_TOKENS}
       GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS}
-      DEV_USER_USERNAME: ${DEV_USER_USERNAME}
-      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS}
+      JWT_REFRESH_COOKIE_NAME: ${JWT_REFRESH_COOKIE_NAME}
+      JWT_REFRESH_COOKIE_PATH: ${JWT_REFRESH_COOKIE_PATH}
+      JWT_REFRESH_COOKIE_SECURE: ${JWT_REFRESH_COOKIE_SECURE}
+      JWT_REFRESH_COOKIE_SAME_SITE: ${JWT_REFRESH_COOKIE_SAME_SITE}
+    ports: # Keep this for dev convenience
+      - "8080:8080"
     networks:
       - fe_net
       - be_net
     depends_on:
       pg:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   fe:

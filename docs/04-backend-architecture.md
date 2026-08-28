@@ -1,25 +1,26 @@
 # Backend Architecture
 
-This document describes the intended package structure of `be/` and the reasoning behind it. The
-codebase currently only has `CareerPilotApplication.java`; this is the target structure to grow
-into as features are implemented.
+This document describes the package structure of `be/` and the reasoning behind it.
 
-## Target Package Structure
+## Package Structure
 
 ```
 blackdemise.cp
 ├── CareerPilotApplication.java
-├── common/                 # shared base classes: BaseEntity, error codes, generic exceptions
-├── config/                 # SecurityConfig, WebConfig, CORS, bean wiring
+├── common/                 # BaseEntity, ErrorResponse, exception/ (ApiException + subtypes),
+│                           # GlobalExceptionHandler
+├── config/                 # SecurityConfig
 ├── ai/                     # centralized Gemini integration (see below)
 │   ├── GeminiClient.java
 │   ├── AiService.java
-│   └── prompt/             # prompt template loading, variable substitution, versioning
-├── user/                   # User entity, profile/instructions, auth
+│   └── prompt/             # prompt template loading, variable substitution
+├── user/                   # User entity, Role enum, AuthService/AuthController, auth DTOs
 ├── chat/                   # Conversation, Message: controller/service/repository/dto/entity
 ├── cv/                     # CV, CVAnalysis: controller/service/repository/dto/entity
 ├── interview/              # InterviewSession, Question, Answer, Evaluation
-└── security/               # authentication filters/config (basic auth for MVP)
+└── security/                # RestAuthenticationEntryPoint, RestAccessDeniedHandler
+    └── jwt/                 # JwtProperties, JwtTokenProvider, TokenBlacklistService (Redis),
+                             # JwtAuthenticationFilter, JwtUserPrincipal, TokenType
 ```
 
 Each feature package (`chat`, `cv`, `interview`, `user`) is internally organized by layer:
@@ -56,7 +57,7 @@ chat/
 
 Per [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 23:
 
-- `User`
+- `User` (`firstName`, `lastName`, `email` unique, `password`, `role`)
 - `Conversation`, `Message`
 - `Cv`, `CvAnalysis`
 - `InterviewSession`, `InterviewQuestion`, `InterviewAnswer`, `InterviewEvaluation`
@@ -64,14 +65,31 @@ Per [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 23:
 ## Configuration
 
 - All configuration lives in `application.yml` and is sourced from environment variables (see
-  the existing `spring.datasource.*` pattern). The Gemini API key will follow the same pattern
-  once AI integration begins — never committed, never hardcoded.
-- `spring.jpa.hibernate.ddl-auto: update` is acceptable for local development only; a migration
-  tool (e.g. Flyway) should be introduced before this project handles anything beyond local/dev
-  data.
+  the existing `spring.datasource.*` pattern) — never committed, never hardcoded.
+- `spring.jpa.hibernate.ddl-auto: validate` — the schema is owned entirely by Flyway migrations
+  under `be/src/main/resources/db/migration`, not by Hibernate auto-DDL. There is no code-based
+  data seeding; the one seed account (an initial `ADMIN`) is inserted by a Flyway migration using
+  placeholders bound to `SEED_ADMIN_*` env vars.
+
+## Authentication
+
+- Stateless JWT: a 15-minute access token (returned in the `/api/v1/auth/*` JSON response body,
+  read by the frontend from `Authorization: Bearer`) and a 7-day refresh token (set by the
+  backend as an httpOnly cookie, scoped to the `/api/v1/auth` path — never exposed in a response
+  body or to JavaScript).
+- `JwtAuthenticationFilter` authenticates purely from the access token's own claims (`sub`,
+  `email`, `firstName`, `lastName`, `role`) — no DB lookup per request — and rejects tokens that
+  are the wrong type, or blacklisted.
+- `TokenBlacklistService` revokes a token by its `jti` in Redis, with a TTL equal to the token's
+  remaining lifetime, so entries expire on their own (no scheduled cleanup job). `/refresh`
+  rotates (blacklists) the presented refresh token immediately, even on success.
+- `Role` is `USER` (default, all self-registered accounts) or `ADMIN` (reserved for future
+  administrative use; not yet wired to any endpoint restriction).
 
 ## Error Handling
 
-A single `@ControllerAdvice` maps domain exceptions (not found, validation, AI failures) to the
-consistent error response shape defined in
-[api.instructions.md](../.github/instructions/api.instructions.md).
+A single `@RestControllerAdvice` (`common.GlobalExceptionHandler`) maps `common.exception.*`
+domain exceptions and validation failures to the consistent error response shape defined in
+[api.instructions.md](../.github/instructions/api.instructions.md); `RestAuthenticationEntryPoint`
+/ `RestAccessDeniedHandler` handle the 401/403 cases raised by Spring Security itself (before a
+controller is even reached) in the same shape.

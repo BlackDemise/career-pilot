@@ -10,8 +10,13 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
 
 ai:
   gemini:
@@ -22,6 +27,13 @@ ai:
     timeout-ms: ${GEMINI_TIMEOUT_MS}
 
 app:
-  dev-user:
-    username: ${DEV_USER_USERNAME}
-    password: ${DEV_USER_PASSWORD}
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER}
+    access-ttl-seconds: ${JWT_ACCESS_TTL_SECONDS}
+    refresh-ttl-seconds: ${JWT_REFRESH_TTL_SECONDS}
+    refresh-cookie:
+      name: ${JWT_REFRESH_COOKIE_NAME}
+      path: ${JWT_REFRESH_COOKIE_PATH}
+      secure: ${JWT_REFRESH_COOKIE_SECURE}
+      same-site: ${JWT_REFRESH_COOKIE_SAME_SITE}

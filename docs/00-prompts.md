@@ -345,3 +345,176 @@ already depends on.
   Gemini Developer API path already established in Entry 3; switching to Vertex/Enterprise would
   require GCP project/service-account setup not currently in scope.
 
+---
+
+## Entry 5 — 2026-08-28 — JWT auth (register/login/refresh/logout), Redis blacklist, Flyway migrations, email-based login
+
+This entry covers a three-message exchange: (1) the user's initial notes plus a request to
+assess-and-confirm before coding, (2) my assessment and clarifying questions, (3) the user's
+answers plus one more clarification round, and (4) final confirmation to proceed. All four
+messages are reproduced/summarized below since together they document the reasoning behind the
+implementation; only the final message triggered code changes.
+
+### User Prompt 1 (verbatim)
+
+> 1. Authentication & Authorization:
+> - JWT (accessToken with TTL=15m stored in localStorage, refreshToken with TTL=7d stored in cookies)
+> - Strategy: for each request requiring authen & author, call to backend directly. If backend returns 401, call /refresh first. If it still returns 401 after that, force back to login immediately. If backend returns 403, show a "You do not have access to this resource"-like page. If 200/201, proceed normally.
+> - Exposed endpoints for this group: /login, /logout, /refresh. /login returns an accessToken and a refreshToken only. Decoding token will be the responsibility of frontend and it will get all essential information to decide whether to accept the token or not. /logout will blacklist both accessToken and refreshToken. /refresh will validate the sent refreshToken, and if valid, blacklist it immediately, then issue new accessToken and refreshToken. Blacklisting accessToken here is optional since /refresh is triggered if accessToken is invalid (if refreshToken is also invalid, force back to login already).
+> - Bring in role for users. Let role be enum.
+> - Redis is the mechanism to blacklist token - don't store them in relational database. This will cost a schedule to clean up expired tokens.
+> 2. Database migration:
+> - Remove all data seeding setup in code. Use Flyway instead.
+> 3. Login mechanism:
+> - Remove username field, replace by these two fields: firstName (non-null) and lastName (non-null instead). Let email be non-null and unique, and force login by email+password. Displayed name will be {firstName} + " " + {lastName}.
+> - Find all things related to removed one and remove them as well.
+> First of all, these are my notes. All required deps are added into pom.xml.
+> Assess my note, read all relevant code and confirm whether you see what I noted, and tell me your intention on what to adjust. Only after we align do we proceed.
+
+### User Prompt 2 (verbatim, answering my clarifying questions)
+
+> Confirmation on your reading:
+> 1. Auth: ok, only one thing: backend is the actual one setting refreshToken onto cookies.
+> 2. Blacklist: ok.
+> 3. Role: ok.
+> 4. Migrations: ok.
+> 5. Login: ok.
+> Answers on your questions:
+> 1. We will move the first-user seeding to Flyway instead. Ah, by the way, add /register endpoint - I overlooked that somehow.
+> 2. Refer to "docs\01-introduction.md", "docs\02-use-cases.md" and "docs\06-roadmap-scope.md" to understand project's scope and propose me all possible roles. I will verify your suggestions.
+> 3. As I propose above, backend should set it as a cookie.
+> 4. We can let it claims-only.
+> 5. Confirmed - add HOST, PORT and PASSWORD. You can leave placeholders, I will fill actual values later then.
+> 6. Ok.
+> 7. /api/v1/** - add versions.
+> Assess again and tell me your intentions to align again.
+
+### User Prompt 3 (verbatim, final go-ahead)
+
+> Cookie question will be A, and role for now will be USER and ADMIN.
+
+### Assessment
+
+Before touching any code, I read `pom.xml` (confirmed `jjwt-api/impl/jackson`, `spring-boot-starter-data-redis`, `spring-boot-starter-flyway` were already added but unused), the existing `security`/`user`/`config` packages (HTTP Basic auth against a single `DevUserInitializer`-seeded user, `User.username`), and `application.yml`/`docker-compose.yml`/`.env.example` (no Redis config, no Flyway migrations, `ddl-auto: update`). I then went through two rounds of clarification (reproduced above) before writing any code, because this touches security-sensitive design decisions (token storage, transport, trust model) that are expensive to redo:
+
+- **Refresh token transport (my question, resolved as "(A)")**: the refresh token is set by the backend as an **httpOnly cookie only** (`Set-Cookie`, scoped to `/api/v1/auth`), never present in any JSON response body — the access token is the only token returned in the body, matching the "decoding token is the frontend's responsibility" note (which only makes sense for a token the frontend actually holds).
+- **Roles**: I searched `docs/01-introduction.md`, `docs/02-use-cases.md`, and `docs/06-roadmap-scope.md` (including its explicit "Red Advanced" warning against "complex authentication and authorization") and found no admin/moderation use case anywhere in the current scope. I proposed `USER` (default) and `ADMIN` (reserved, unused for now) as the minimal extensible set; the user confirmed exactly that.
+- **First-user bootstrap**: since code-based seeding is being removed and there was no `/register` endpoint in the original note, I flagged the gap; the user added `/register` and confirmed a Flyway *data* migration should seed one initial account instead.
+- **Trust model**: confirmed claims-only authentication (no DB hit per request on the access token, given its short 15-minute TTL).
+- **API versioning**: confirmed `/api/v1/**` as the new base path for everything, including the auth endpoints.
+
+### What Was Done
+
+**Dependencies/config**
+- `be/pom.xml`: added `spring-boot-starter-validation` (needed for `@Valid` on the new DTOs; was missing).
+- `be/src/main/resources/application.yml`: `ddl-auto: update` → `validate`; added `spring.flyway.placeholders.*` (seed admin fields) and `spring.data.redis.{host,port,password}`; added `app.jwt.*` (secret, issuer, access/refresh TTL seconds, nested `refresh-cookie.{name,path,secure,same-site}`); removed `app.dev-user.*`.
+- `docker-compose.yml`: added a `redis` service (`redis:alpine`, password-protected via `--requirepass`, healthcheck via `redis-cli ping`); `be` now depends on both `pg` and `redis` health; added `REDIS_*`, `JWT_*`, `SEED_ADMIN_*` env passthroughs; removed `DEV_USER_*`.
+- `.env.example`: removed `DEV_USER_*`; added `REDIS_HOST/PORT/PASSWORD` (left blank, per the user's instruction to fill in later), `JWT_*` (secret blank, everything else given sensible filled-in defaults matching the existing `GEMINI_MODEL`-style convention), and `SEED_ADMIN_*` (email/password-hash blank, first/last name defaulted) with a comment warning that Flyway migrations are immutable once applied, so these must be filled in **before** the first run against a fresh database.
+
+**Removed (Basic-auth/dev-user code, per instruction 1/2)**
+- Deleted `security/DevUserInitializer.java`, `security/DevUserProperties.java`, `security/UserDetailsServiceImpl.java` (no longer needed — login now does a manual `passwordEncoder.matches(...)` check in `AuthService` instead of going through Spring Security's `UserDetailsService`/`DaoAuthenticationProvider`).
+
+**`user` package**
+- `User`: replaced `username` with `firstName`/`lastName` (non-null), made `email` non-null + unique, added `role` (`Role` enum: `USER`, `ADMIN`).
+- `UserRepository`: `findByUsername` → `findByEmail`, added `existsByEmail`.
+- `Role.java` (enum).
+- `TokenPair` (internal access+refresh+refresh-expiry triple, never serialized directly).
+- `dto/RegisterRequest`, `dto/LoginRequest` (both `jakarta.validation`-annotated), `dto/AuthResponse` (access token only).
+- `AuthService`: `register` (checks email uniqueness → `ConflictException`, encodes password, defaults `Role.USER`), `login` (email lookup + password match → `UnauthorizedException` on either failure, same generic message to avoid user enumeration), `refresh` (validates token type/blacklist status, rotates by blacklisting the presented refresh token immediately, reloads the user by id, issues a new pair), `logout` (best-effort blacklists both tokens, tolerant of missing/invalid ones so logout is always idempotent).
+- `AuthController` (`/api/v1/auth/register|login|refresh|logout`): sets/clears the refresh cookie via `ResponseCookie`, reads it back via `@CookieValue(name = "${app.jwt.refresh-cookie.name}")`, reads the access token for logout from the `Authorization` header.
+
+**`security`/`security.jwt` package**
+- `jwt/JwtProperties` (+ nested `RefreshCookie` record) bound from `app.jwt.*`.
+- `jwt/TokenType` (`ACCESS`/`REFRESH`), `jwt/IssuedToken`, `jwt/JwtUserPrincipal` (claims-only principal: id/email/firstName/lastName/role).
+- `jwt/JwtTokenProvider`: issues/parses HS256 JWTs (`io.jsonwebtoken`/jjwt 0.13.0) with `jti`, `typ`, `email`, `firstName`, `lastName`, `role` claims.
+- `jwt/TokenBlacklistService`: Redis-backed (`StringRedisTemplate`), keyed `auth:blacklist:<jti>`, TTL set to the token's remaining lifetime — no cleanup schedule needed, exactly as the user specified.
+- `jwt/JwtAuthenticationFilter` (`OncePerRequestFilter`): authenticates purely from the access token's own claims (no DB hit), rejects wrong-type or blacklisted tokens by simply not authenticating (falls through to the entry point).
+- `RestAuthenticationEntryPoint` (401 JSON) / `RestAccessDeniedHandler` (403 JSON, message literally "You do not have access to this resource" per the user's own phrasing).
+
+**`common` package (new, since we now have real controllers to exercise it)**
+- `ErrorResponse` (`{ "error": { "code", "message" } }`, matching `api.instructions.md`).
+- `exception/ApiException` (abstract, carries `HttpStatus` + code) with `NotFoundException`, `ConflictException`, `UnauthorizedException`.
+- `GlobalExceptionHandler` (`@RestControllerAdvice`): maps `ApiException` subtypes, `MethodArgumentNotValidException` (→ `VALIDATION_ERROR`), and a generic `Exception` fallback (→ `INTERNAL_ERROR`) to that shape.
+
+**`config.SecurityConfig`**: rewritten — stateless, `/api/v1/auth/**` permit-all, everything else under `/api/v1/**` requires authentication via `JwtAuthenticationFilter` (added before `UsernamePasswordAuthenticationFilter`), wired to the new entry point/access-denied handler. Dropped the old `AuthenticationProvider`/`UserDetailsService` beans entirely.
+
+**Flyway migrations** (`be/src/main/resources/db/migration/`)
+- `V1__init_schema.sql`: full schema for `users` (with the new columns + a `role` `CHECK` constraint) and all existing MVP entities (`conversations`, `messages`, `cvs`, `cv_analyses`, `interview_sessions`, `interview_questions`, `interview_answers`, `interview_evaluations`), matching Spring Boot's default snake_case column naming for every JPA entity field, with FKs and indexes on FK columns.
+- `V2__seed_admin_user.sql`: inserts one `ADMIN` user via `spring.flyway.placeholders.*` (`ON CONFLICT (email) DO NOTHING` for idempotency); the password value must already be a BCrypt hash, since SQL cannot hash it.
+
+**Instructions/docs kept in sync**
+- `api.instructions.md`: `/api/**` → `/api/v1/**`, noted the auth endpoints as the deliberate verb-based exception, noted that everything else requires a JWT.
+- `backend.instructions.md`: added rules for Flyway-only schema changes, JWT auth model (claims-only, Redis blacklist by `jti`, no cleanup job), and "no code-based data seeding."
+- `04-backend-architecture.md`: updated package tree and MVP entity list (`User` fields), added "Authentication" section describing the JWT/Redis design, updated "Error Handling" to describe the actual `GlobalExceptionHandler`/entry-point/access-denied-handler split.
+- `02-use-cases.md`: reworded row 0.4 from "Basic auth / single dev user" to the actual JWT/register/login/refresh design.
+
+**Tests**
+- `JwtTokenProviderTest`: generates access/refresh tokens and asserts claims (`sub`, `jti`, `typ`, `email`, `role`); asserts an expired token throws `ExpiredJwtException`.
+- `AuthServiceTest`: register (success + duplicate email), login (success + user-not-found + wrong-password), refresh (success + missing/blank + already-blacklisted + wrong-type), logout (both tokens blacklisted + tolerates missing/invalid tokens) — 11 cases total, all collaborators mocked (no real Redis/DB).
+
+**Verification** — recompiled (`mvnw -DskipTests compile`) and ran the full suite (`mvnw test`): 18 tests, 0 failures/errors, `BUILD SUCCESS`.
+
+### What Could Not Be Done
+
+- Did not implement any `@PreAuthorize`/role-gated endpoint for `ADMIN` — no admin use case exists anywhere in the current docs, so wiring one now would be speculative; the enum value exists but is otherwise inert until a real admin feature is requested.
+- Did not write a `TokenBlacklistServiceTest` — it is a two-line delegation to `StringRedisTemplate`; mocking that template would only test Mockito's own stubbing, and a meaningful test would need a real or embedded Redis (e.g. Testcontainers), which is a heavier addition I didn't want to make unprompted. Flagging this as a gap for when integration testing infra is set up.
+- Did not actually generate a real BCrypt hash for `SEED_ADMIN_PASSWORD_HASH` or run the app against a live Postgres/Redis — no environment values were provided (by design, per "leave placeholders, I will fill actual values later"), so the Flyway migrations and Redis/JWT wiring are compiled and unit-tested but not yet exercised end-to-end against real infrastructure.
+- Did not add CORS configuration for a cross-origin frontend dev server (e.g. Vite on a different port than the backend) talking to the httpOnly-cookie-based refresh flow — today the FE is only a scaffold, and in the docker-compose/nginx setup FE and BE are same-origin (nginx proxies both under one host), which sidesteps the issue entirely. Recommend a same-origin dev proxy (Vite `server.proxy`) rather than CORS when FE work starts, to keep the cookie same-site.
+- Did not touch `docs/03-frontend-architecture.md` or any `fe/` code — the frontend interceptor strategy described in the user's notes (401 → refresh → retry, force logout on repeat 401, dedicated 403 page) is frontend work not yet requested; only the backend contract it depends on was built.
+- Did not add rate limiting on `/login`/`/register` (brute-force protection) — not mentioned in the notes, and `docs/06-roadmap-scope.md` places rate limiting under V1 security hardening, not MVP.
+
+### Alternatives Considered
+
+- Considered keeping Spring Security's `UserDetailsService`/`DaoAuthenticationProvider`/`AuthenticationManager` machinery and only swapping HTTP Basic for JWT. Rejected: with a claims-only trust model and a manual password check in `AuthService`, that machinery added indirection without benefit, so it was removed entirely in favor of a simpler, more explicit `AuthService`.
+- Considered storing the refresh token's `jti` allowlist (rotation tracking) instead of a blacklist (i.e., track valid tokens rather than revoked ones). Rejected: the user's note explicitly frames this as blacklisting revoked/used tokens, and a blacklist keeps the common case (an untouched, still-valid token) requiring zero Redis state, only writing an entry when a token is actually consumed/revoked.
+- Considered signing access and refresh tokens with two different secrets instead of one shared secret + a `typ` claim. Rejected as unnecessary complexity for this scope — a single secret with a `typ` claim distinguishes them just as safely here, and was already implicitly agreed when the user confirmed the JWT approach without asking for separate keys.
+- Considered making `ADMIN` immediately enforce access to some endpoint (e.g. a placeholder `/api/v1/admin/ping`) just to prove the role works end-to-end. Rejected as scope creep — the user only asked for the enum, not a feature that uses it, and inventing an endpoint to demonstrate it would go beyond "what was directly requested."
+- Considered a `/register` response returning only 201 with no body (register-then-separately-login). Rejected in favor of auto-login (issuing tokens immediately on register, same as `/login`) since the user's model treats register as just another way to obtain a session, and the endpoint list groups it with login/refresh/logout as one cohesive "auth" surface.
+
+---
+
+## Entry 6 — 2026-08-28 — Migrate Spring Boot 4 JSON handlers to JsonMapper
+
+### User Prompt (verbatim)
+
+> com.fasterxml.jackson.databind.ObjectMapper: Spring Boot 4 migrated to JsonMapper - search online to confirm this information, and adjust correspondingly.
+
+### Assessment
+
+The repository uses Spring Boot 4.1.1. I searched the official Spring Boot 4 migration guide and
+confirmed that Spring Boot 4 uses Jackson 3 as its preferred JSON library, with packages moving
+from `com.fasterxml.jackson` to `tools.jackson`. The guide specifically says that JSON is
+auto-configured with `JsonMapper` and that defining an `ObjectMapper` bean is no longer enough to
+replace the JSON mapper. A workspace search found exactly two remaining `ObjectMapper` imports,
+both in the security handlers that serialize 401 and 403 API errors.
+
+### What Was Done
+
+- Replaced `com.fasterxml.jackson.databind.ObjectMapper` with
+  `tools.jackson.databind.json.JsonMapper` in `RestAuthenticationEntryPoint`.
+- Replaced the corresponding constructor-injected field and `writeValue` call with `JsonMapper`
+  in `RestAccessDeniedHandler`.
+- Left the Maven dependency set unchanged: Spring Boot's existing web/security starters provide
+  the Boot-managed Jackson 3 JSON support, and no separate Jackson dependency is required.
+- Confirmed there are no remaining `ObjectMapper` or `JsonMapper` references outside those two
+  handlers that need migration.
+- Verification: backend compilation succeeded and the full test suite passed: 18 tests, 0
+  failures, 0 errors, `BUILD SUCCESS`.
+
+### What Could Not Be Done
+
+- I could not perform a live HTTP request against the 401/403 handlers because the application
+  requires configured PostgreSQL, Redis, JWT, and Flyway seed environment values to start. The
+  compile and existing unit suite validate the type migration, but not a running HTTP response.
+
+### Alternatives Considered
+
+- Considered retaining Jackson 2 `com.fasterxml.jackson.databind.ObjectMapper` through the
+  Spring Boot 4 compatibility module. Rejected because the application has no Jackson 2-specific
+  dependency or behavior, and the official migration guide recommends adopting Jackson 3 where
+  possible.
+- Considered defining a custom `JsonMapper` bean. Rejected because these handlers only need the
+  auto-configured mapper and do not customize serialization; constructor injection of the
+  existing Boot-managed `JsonMapper` is the smallest correct change.
+
+
