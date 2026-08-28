@@ -57,7 +57,8 @@ chat/
 
 Per [docs/06-roadmap-scope.md](./06-roadmap-scope.md) section 23:
 
-- `User` (`firstName`, `lastName`, `email` unique, `password`, `role`)
+- `User` (`firstName`, `lastName`, `email` unique, `password`, `role`, preferred language,
+  response style, technical background, career goal, custom instructions)
 - `Conversation`, `Message`
 - `Cv`, `CvAnalysis`
 - `InterviewSession`, `InterviewQuestion`, `InterviewAnswer`, `InterviewEvaluation`

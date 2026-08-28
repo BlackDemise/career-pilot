@@ -682,4 +682,136 @@ security handlers establishes the rule for future endpoints as well.
 - Considered putting field validation errors into the message string. Rejected because the request
   explicitly requires `result` to hold a `Map<String, String>` for validation failures.
 
+## Entry 9 — 2026-08-28 — Implement P0 AI Chat
+
+### User Prompt (verbatim)
+
+> Read all documents in "docs" and all instructions in ".github" to understand what we need to do and how we should do that.
+> Refer to "docs\02-use-cases.md": we've completed #sym:## 0. Shared AI Infrastructure (build first — everything depends on this) . Now we will move on to #sym:## 1. AI Chat
+> Understand the implementation scope, read relevant setup in "be" codebase, search for Gemini AI implementation (just to make sure you get fresh information), and implement them.
+
+### Assessment
+
+The requested section is the P0 AI Chat slice: create conversations, send messages and receive
+Gemini responses, persist and reload history, apply a global user profile/instruction context,
+enforce career/technology scope through the existing system prompt, and delete conversations.
+Streaming, retry/regeneration, markdown, intent classification, summarization, web search, and
+cross-conversation retrieval remain P1 or later. The existing entities, repositories, JWT claims,
+ApiResponse wrapper, prompt loader, and official Google Gen AI Java SDK were sufficient for a
+focused backend implementation.
+
+### What Was Done
+
+- Added persistent profile fields to `User` and Flyway migration `V3__add_user_chat_profile.sql`.
+- Added `UserProfileService` and `GET/PUT /api/v1/users/me/profile` for preferred language,
+  response style, technical background, career goal, and custom instructions.
+- Added `ChatService` and `ChatController` with:
+  - `POST /api/v1/conversations`
+  - `GET /api/v1/conversations`
+  - `GET /api/v1/conversations/{conversationId}`
+  - `POST /api/v1/conversations/{conversationId}/messages`
+  - `DELETE /api/v1/conversations/{conversationId}`
+- Scoped all conversation access by the JWT user's UUID, explicitly preventing cross-user access.
+- Built Gemini context from the rendered `chat-system` resource prompt, global profile data, and
+  the ordered conversation history. User profile/custom instructions are marked as context data,
+  not system instructions, and the system prompt retains the career/technology scope refusal.
+- Automatically derives a conversation title from the first user message when the default title
+  is still present.
+- Added `ChatServiceTest` covering message persistence, prompt history/profile assembly, and
+  ownership isolation. Updated the backend architecture document with the new profile fields.
+- Searched the official `googleapis/java-genai` repository and confirmed the pinned `1.68.0` SDK
+  supports the existing `Client.models.generateContent` boundary; no Gemini integration change
+  was needed.
+
+### What Could Not Be Done
+
+- No live Gemini, PostgreSQL, Redis, or HTTP integration test was run because this environment has
+  no configured service credentials/instances. Tests mock `AiService` as required.
+- No frontend implementation was added because the prompt requested reading the backend setup and
+  implementing the Chat use cases, while the frontend remains a scaffold without an API client.
+- P1 streaming, retries, regeneration, message editing, markdown rendering, intent classification,
+  summarization, and web search were intentionally left for their documented priorities.
+
+### Alternatives Considered
+
+- Considered storing the chat profile in a separate table. Rejected because the profile is one
+  global set of user instructions and adding five nullable columns to the existing User entity is
+  the smallest persistence change matching the MVP model.
+- Considered a separate title endpoint or title-generation AI call. Rejected because deriving the
+  first message gives every conversation a useful title without an extra model request or API.
+- Considered deleting a conversation through a database cascade. Used explicit message deletion
+  followed by conversation deletion because the existing JPA mappings do not declare cascade rules,
+  making the behavior deterministic across the configured PostgreSQL schema.
+
+## Entry 10 — 2026-08-28 — Add HTTP endpoint examples and instruction
+
+### User Prompt (verbatim)
+
+> Build corresponding HTTP files to test these endpoints in "http" folder - update this as an instruction, something like: for every new endpoint added, add a HTTP test to corresponding file.
+> There is already "http/auth-controller.http" for you to refer. Don't need to cover all possible case - covering successful case is sufficient.
+
+### Assessment
+
+The newly implemented Chat and user-profile controllers had no REST Client examples. The existing
+`http/auth-controller.http` establishes the repository's simple `baseUrl` and request format, so
+successful happy-path examples are sufficient without introducing response scripting or a broader
+HTTP test framework.
+
+### What Was Done
+
+- Added `http/chat-controller.http` with successful create, list, get, send-message, and delete
+  requests. It uses placeholders for the JWT access token and conversation ID.
+- Added `http/user-controller.http` with successful get-profile and update-profile requests.
+- Updated `api.instructions.md` so every future endpoint must have at least one successful REST
+  Client request in the corresponding `http/` file.
+
+### What Could Not Be Done
+
+- The requests were not executed against a live backend because PostgreSQL, Redis, SMTP, and
+  Gemini configuration are not available in this environment. They are ready for execution after
+  the application is running and the placeholders are replaced.
+- The examples do not automate extracting tokens or IDs from prior responses; the existing HTTP
+  file style is manual and the request only requires successful-case coverage.
+
+### Alternatives Considered
+
+- Considered adding REST Client response handlers to chain login, conversation creation, and later
+  requests automatically. Rejected to keep the files consistent with the existing minimal HTTP
+  examples and avoid coupling them to client-specific scripting behavior.
+
+## Entry 11 — 2026-08-28 — Add completion tracking to use-case tables
+
+### User Prompt (verbatim)
+
+> Update the "docs\02-use-cases.md" to add one more column to the right: Completed?
+> This lets us trace what we are doing easier.
+> After that, refer to "Shared AI Infrastructure" to see how many we have completed, and indicate them as well.
+
+### Assessment
+
+The use-case document contains tables for Shared AI Infrastructure, AI Chat, CV Analysis, Mock
+Interview, and Cross-Feature Integration. Adding the column to every table keeps completion status
+consistent across the entire implementation roadmap. The existing prompt log and implementation
+records show that Shared AI Infrastructure items 0.1 through 0.4 are complete, while 0.5 remains
+incomplete because streaming, token tracking, and retry limits are P1.
+
+### What Was Done
+
+- Added a `Completed?` column to all use-case tables in `docs/02-use-cases.md`.
+- Marked 0.1, 0.2, 0.3, and 0.4 as `Yes`.
+- Marked 0.5 as `No`.
+- Marked AI Chat 1.1 through 1.6 as `Yes`, based on the completed P0 implementation.
+- Marked all remaining CV, Mock Interview, and Cross-Feature use cases as `No` because they have
+  not been implemented yet.
+
+### What Could Not Be Done
+
+- No implementation work was requested in this prompt, so no additional use cases were completed.
+
+### Alternatives Considered
+
+- Considered adding status values such as `In progress` and `Blocked`. Rejected because the request
+  asks for a completion column and the current evidence supports a simple completed/not-completed
+  status.
+
 

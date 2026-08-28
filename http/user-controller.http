@@ -1,0 +1,19 @@
+@baseUrl = http://localhost:8080
+@accessToken = replace-with-access-token
+
+### Get current user's chat profile
+GET {{baseUrl}}/api/v1/users/me/profile
+Authorization: Bearer {{accessToken}}
+
+### Update current user's chat profile
+PUT {{baseUrl}}/api/v1/users/me/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "preferredLanguage": "English",
+  "responseStyle": "Concise and practical",
+  "technicalBackground": "Java and Spring Boot backend developer",
+  "careerGoal": "Become a senior backend engineer",
+  "customInstructions": "Use concrete examples and explain trade-offs"
+}

@@ -1,6 +1,6 @@
 ---
 description: "Use when designing or modifying REST API endpoints, request/response DTOs, or the contract between fe/ and be/."
-applyTo: ["be/**/controller/**", "be/**/dto/**", "fe/**/api/**"]
+applyTo: ["be/**/controller/**", "be/**/dto/**", "fe/**/api/**", "http/**"]
 ---
 
 # API Contract Instructions
@@ -31,3 +31,6 @@ applyTo: ["be/**/controller/**", "be/**/dto/**", "fe/**/api/**"]
   the same change — never let them drift.
 - Do not leak internal-only entity fields (surrogate keys not needed by the client, audit
   columns, etc.) through the API unless the frontend has a real need for them.
+- For every new endpoint, add at least one successful REST Client request to the corresponding
+  file under `http/`. Keep HTTP examples focused on the happy path; they may use placeholders for
+  authentication tokens and IDs when those values must be obtained from an earlier request.
