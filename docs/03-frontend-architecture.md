@@ -76,24 +76,36 @@ flowchart LR
 
 ## Visual Direction
 
-CareerPilot should feel like a focused preparation desk: calm enough for long reading and writing,
-but with distinct visual signals for analysis and live interview urgency. Use a light, editorial
-workspace as the default rather than a generic dashboard or dark AI chat theme.
+CareerPilot's visual direction is "Quiet Technical": neutral surfaces, one restrained accent, and
+monospace only for numeric/status data. This is a tool used under stress (job search, interview
+prep) with dense, decision-relevant content (scores, skill gaps, live timers) — clarity and trust
+beat visual flourish. The full token list, component inventory, and anti-patterns are enforced in
+[frontend-design.instructions.md](../.github/instructions/frontend-design.instructions.md); this
+section only records the direction and why.
 
-- Typography: use a purposeful humanist sans for UI and a readable serif or high-contrast display
-  face for page titles. Load fonts explicitly; do not default to Inter, Roboto, Arial, or a system
-  stack as the visual identity.
-- Palette: warm off-white canvas, ink charcoal, deep teal for primary actions, coral for attention,
-  and restrained mint/yellow status accents. Keep contrast accessible and reserve coral for warnings,
-  destructive actions, and integrity observations.
-- Layout: authenticated pages use a stable left navigation rail on desktop and a compact top/bottom
-  navigation pattern on mobile. Main content is an unframed workspace; cards are reserved for
-  repeated records, results, dialogs, and setup tools.
-- Chat prioritizes readable message flow and a persistent composer. CV pages prioritize document
-  input beside scannable analysis sections. Interview pages prioritize the current interviewer
-  message, answer composer, timer, phase, and connection state.
-- Motion is purposeful: route entrance, result reveal, connection transitions, and countdown warning
-  states. Respect `prefers-reduced-motion` and never use animation to hide loading or error states.
+- Typography: one sans (Inter) for all UI text and headings, everywhere including auth pages — no
+  separate display/serif face. JetBrains Mono is used only for numeric/status data: scores,
+  countdown timers, session/record IDs, and code blocks.
+- Palette: neutral canvas/surface/border/text scale, a single indigo/blue accent, and semantic
+  color pairs (success/warning/danger/info) with a fixed meaning: success = matched/passed,
+  warning = missing-but-optional/cooldown/timeout, danger = destructive/expired/integrity flag,
+  info = neutral status. Color is never the only signal; pair it with an icon or label.
+- Dark mode is a first-class requirement from the start, not a later addition: it defaults to the
+  visitor's `prefers-color-scheme` and can be manually overridden, persisted via `ThemeProvider`/
+  `useTheme` (`fe/src/app/providers/`), which sets `data-theme` on the document root.
+- Layout: authenticated pages use a fixed dark navigation rail on desktop (independent of the
+  light/dark toggle, like an IDE activity bar) and a compact top/bottom pattern on mobile. Main
+  content is an unframed workspace; cards are reserved for repeated records, results, and dialogs,
+  with a 1px border and no shadow — shadow is reserved for one overlay elevation level (dropdowns/
+  modals) only.
+- Chat prioritizes a compact conversation list and a flat message flow (no heavy bubble chrome)
+  with a persistent composer. CV pages pair document input with scannable analysis cards (pill
+  chips for matched/missing skills, a monospace score). Interview pages prioritize the current
+  interviewer message, a monospace countdown, phase indicator, and connection state; integrity
+  events render as a quiet inline log, never an alarming style.
+- Motion is purposeful: route entrance, result reveal, connection transitions, and countdown
+  warning states. Respect `prefers-reduced-motion` and never use animation to hide loading/error
+  states.
 
 ## Dependency Policy
 
