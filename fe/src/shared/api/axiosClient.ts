@@ -1,6 +1,9 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios, { type AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
 import { ApiError, type ApiResponse, type ApiValidationErrors } from './types'
 import { clearAccessToken, getAccessToken, setAccessToken } from './authSession'
+
+type AuthAwareRequestConfig = AxiosRequestConfig & { _skipAuthRefresh?: boolean }
+type AuthAwareInternalConfig = InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRefresh?: boolean }
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
@@ -26,9 +29,8 @@ function toApiError(error: AxiosError<ApiResponse<unknown>>): ApiError {
 }
 
 async function refreshAccessToken(): Promise<string> {
-  const response = await apiClient.post<ApiResponse<string>>('/auth/refresh', undefined, {
-    _skipAuthRefresh: true,
-  } as InternalAxiosRequestConfig)
+  const skipAuthRefreshConfig: AuthAwareRequestConfig = { _skipAuthRefresh: true }
+  const response = await apiClient.post<ApiResponse<string>>('/auth/refresh', undefined, skipAuthRefreshConfig)
   const token = response.data.result
   if (!token) throw new ApiError('Your session has expired.', 401)
   setAccessToken(token)
@@ -50,7 +52,7 @@ apiClient.interceptors.response.use(
     return response
   },
   async (error: AxiosError<ApiResponse<unknown>>) => {
-    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRefresh?: boolean }) | undefined
+    const originalRequest = error.config as AuthAwareInternalConfig | undefined
     if (error.response?.status !== 401 || !originalRequest || originalRequest._retry || originalRequest._skipAuthRefresh) {
       if (error.response?.status === 401 && !originalRequest?._skipAuthRefresh) clearAccessToken()
       return Promise.reject(toApiError(error))
