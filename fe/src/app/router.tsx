@@ -5,6 +5,8 @@ import { PendingPage } from '../features/auth/PendingPage'
 import { VerifyPage } from '../features/auth/VerifyPage'
 import { ResetPage } from '../features/auth/ResetPage'
 import { AppLayout } from './layout/AppLayout'
+import { ChatPage } from '../features/chat/ChatPage'
+import { ProfilePage } from '../features/profile/ProfilePage'
 
 function ProtectedRoutes() {
   const { isAuthenticated } = useAuth()
@@ -27,10 +29,10 @@ export function AppRouter() {
     <Route element={<ProtectedRoutes />}>
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/chat" replace />} />
-        <Route path="chat" element={<PlaceholderPage title="A clearer next move" detail="Your career conversations will live here." />} />
+        <Route path="chat/:conversationId?" element={<ChatPage />} />
         <Route path="cv" element={<PlaceholderPage title="Make your experience legible" detail="Upload and understand your CV here." />} />
         <Route path="interview" element={<PlaceholderPage title="Practice under pressure" detail="Your live interview room will open here." />} />
-        <Route path="profile" element={<PlaceholderPage title="Your working profile" detail="Shape the context CareerPilot brings to every conversation." />} />
+        <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Route>
     <Route path="*" element={<Navigate to="/chat" replace />} />

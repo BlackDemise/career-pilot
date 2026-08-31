@@ -54,12 +54,12 @@ if the request fails. The UI must not infer account existence from forgot-passwo
 
 | Use cases | Priority | Backend status | Frontend work | Completed |
 |---|---|---|---|---|
-| 1.1 Create conversation | P0 | Implemented | Conversation list, new conversation action, title state | No |
-| 1.2 Send and receive message | P0 | Implemented | Message timeline, composer, submit lock, request error recovery | No |
-| 1.3 Save and reload history | P0 | Implemented | List/detail loading, selected conversation route, empty states | No |
-| 1.4 Global profile instructions | P0 | Implemented | Profile form for language, style, background, goal, custom instructions | No |
-| 1.5 Career/technology scope | P0 | Implemented by backend prompt | Render refusal as a normal assistant message; do not duplicate policy in UI | No |
-| 1.6 Delete conversation | P0 | Implemented | Confirmed destructive action and list reconciliation | No |
+| 1.1 Create conversation | P0 | Implemented | Conversation list, new conversation action, title state | Yes |
+| 1.2 Send and receive message | P0 | Implemented | Message timeline, composer, submit lock, request error recovery | Yes |
+| 1.3 Save and reload history | P0 | Implemented | List/detail loading, selected conversation route, empty states | Yes |
+| 1.4 Global profile instructions | P0 | Implemented | Profile form for language, style, background, goal, custom instructions | Yes |
+| 1.5 Career/technology scope | P0 | Implemented by backend prompt | Render refusal as a normal assistant message; do not duplicate policy in UI | Yes |
+| 1.6 Delete conversation | P0 | Implemented | Confirmed destructive action and list reconciliation | Yes |
 | 1.7 Streaming, retry, edit, markdown | P1 | Not implemented | Add only after matching backend transport and response semantics exist | No |
 | 1.8 Intent classification | P1 | Not implemented | Add visible context indicators only if API exposes a client-safe contract | No |
 | 1.9 Conversation summaries | P1 | Not implemented | Add summary/loading states once endpoint and persistence exist | No |

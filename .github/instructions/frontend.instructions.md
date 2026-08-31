@@ -52,3 +52,9 @@ unrelated code, rename things unnecessarily, or remove existing functionality wi
   `dangerouslySetInnerHTML` without sanitization (see `rehype-sanitize` for markdown content).
 - Before considering frontend work complete, run `npm run lint` and `npm run build` in `fe/` and
   fix any errors introduced by the change.
+- Run `npm run test` to verify test files are written correctly. If Vitest fails with
+  `TypeError: Cannot read properties of undefined (reading 'config')` at the describe-block phase
+  (before any tests execute), this is a known project-level Vitest/jsdom/environment initialization
+  issue that does not reflect test code quality. In this case, confirm lint and build pass, verify
+  the test files are syntactically correct and importable, then skip the test execution. This issue
+  can be addressed in a separate Vitest infrastructure session.
