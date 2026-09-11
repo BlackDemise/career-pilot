@@ -9,5 +9,7 @@ public record AiProperties(
         String model,
         double temperature,
         int maxOutputTokens,
-        long timeoutMs) {
+        long timeoutMs,
+        int maxRetries,
+        long retryBackoffMs) {
 }

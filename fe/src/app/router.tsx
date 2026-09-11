@@ -6,6 +6,7 @@ import { VerifyPage } from '../features/auth/VerifyPage'
 import { ResetPage } from '../features/auth/ResetPage'
 import { AppLayout } from './layout/AppLayout'
 import { ChatPage } from '../features/chat/ChatPage'
+import { CvAnalysisPage } from '../features/cv-analysis/CvAnalysisPage'
 import { ProfilePage } from '../features/profile/ProfilePage'
 
 function ProtectedRoutes() {
@@ -30,7 +31,7 @@ export function AppRouter() {
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/chat" replace />} />
         <Route path="chat/:conversationId?" element={<ChatPage />} />
-        <Route path="cv" element={<PlaceholderPage title="Make your experience legible" detail="Upload and understand your CV here." />} />
+        <Route path="cv" element={<CvAnalysisPage />} />
         <Route path="interview" element={<PlaceholderPage title="Practice under pressure" detail="Your live interview room will open here." />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>

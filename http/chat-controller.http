@@ -1,6 +1,7 @@
 @baseUrl = http://localhost:8080
 @accessToken = eyJhbGciOiJIUzUxMiJ9.eyJqdGkiOiI3MmJmNzQ2ZC05NmM4LTQzNTItYjBhZC02N2FhM2IwNjQ3YTAiLCJzdWIiOiI4OWQ2YTJjZC05ODZhLTQwZTYtYTVjMi0xMWNiNDNiYzhmOTciLCJpc3MiOiJDYXJlZXJQaWxvdCIsImlhdCI6MTc4Nzg5OTY0NywiZXhwIjoxNzg3OTAwNTQ3LCJ0eXAiOiJBQ0NFU1MiLCJlbWFpbCI6Im5ncGhAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiTmciLCJsYXN0TmFtZSI6IlBoIiwicm9sZSI6IkFETUlOIn0.Y1cAxrRThIIIlen8Bp-YBbhKXhL0HzkorjS0UEOpZ5pWop3CojVs-O93buXzOkTcPFFIhE4HNGWtUA3X91sH7Q
 @conversationId = c6e2c021-73d2-4f66-bac3-8bd0b429fc29
+@messageId = 3f8b6a2e-6b7a-4e8b-9a9a-3b2f6a2e6b7a
 
 ### Create conversation
 POST {{baseUrl}}/api/v1/conversations
@@ -28,6 +29,32 @@ Content-Type: application/json
   "content": "For a TypeScript senior, what will you expect this candidate to master?"
 }
 
+### Send message (SSE stream: "chunk" events, then "done" with the persisted message)
+POST {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages/stream
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "content": "For a TypeScript senior, what will you expect this candidate to master?"
+}
+
+### Regenerate the latest assistant message (SSE stream)
+POST {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages/{{messageId}}/regenerate
+Authorization: Bearer {{accessToken}}
+Accept: text/event-stream
+
+### Edit a user message and stream a fresh assistant reply (SSE stream)
+POST {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages/{{messageId}}/edit
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "content": "For a TypeScript senior, what should I focus on for system design rounds?"
+}
+
 ### Delete conversation
 DELETE {{baseUrl}}/api/v1/conversations/{{conversationId}}
 Authorization: Bearer {{accessToken}}
+

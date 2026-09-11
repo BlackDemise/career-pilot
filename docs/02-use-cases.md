@@ -20,7 +20,7 @@ planned unless explicitly requested).
 | 0.2 | Prompt templates organized by workflow, loaded from resources (not hardcoded) | P0 | Yes |
 | 0.3 | Persistence layer (PostgreSQL + JPA + Flyway migrations) with MVP entities (see [04-backend-architecture.md](./04-backend-architecture.md)) | P0 | Yes |
 | 0.4 | Auth: register/login by email+password, stateless JWT (access token + httpOnly-cookie refresh token), Redis-backed revocation | P0 | Yes |
-| 0.5 | Streaming responses, token usage tracking, retry with limits | P1 | No |
+| 0.5 | Streaming responses, token usage tracking, retry with limits | P1 | Yes |
 
 ### Authentication Details
 
@@ -52,7 +52,7 @@ planned unless explicitly requested).
 | 1.4 | User sets instructions/profile (language, style, background, career goal) applied to all conversations | P0 | Yes |
 | 1.5 | Chat enforces career/tech scope; out-of-scope questions are refused via system prompt | P0 | Yes |
 | 1.6 | User deletes a conversation | P0 | Yes |
-| 1.7 | Streaming responses, regenerate/retry, edit user message, markdown rendering | P1 | No |
+| 1.7 | Streaming responses, regenerate/retry, edit user message, markdown rendering | P1 | Yes |
 | 1.8 | Intent classification (GENERAL_CAREER, TECHNICAL, CV_DISCUSSION, INTERVIEW_DISCUSSION, OUT_OF_SCOPE) | P1 | No |
 | 1.9 | Conversation summarization for long conversations | P1 | No |
 | 1.10 | Web search grounding, semantic/long-term memory, cross-conversation retrieval | P2/P3 | No |

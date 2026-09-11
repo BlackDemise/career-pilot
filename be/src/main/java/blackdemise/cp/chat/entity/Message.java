@@ -31,4 +31,9 @@ public class Message extends BaseEntity {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
+
+    // Populated only for ASSISTANT messages, from Gemini's usage metadata.
+    private Integer promptTokens;
+    private Integer completionTokens;
+    private Integer totalTokens;
 }

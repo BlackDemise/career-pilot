@@ -4,29 +4,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import blackdemise.cp.ai.AiService;
+import blackdemise.cp.ai.AiStreamHandler;
+import blackdemise.cp.ai.AiUsage;
 import blackdemise.cp.ai.prompt.PromptTemplateService;
+import blackdemise.cp.chat.dto.EditMessageRequest;
 import blackdemise.cp.chat.dto.SendMessageRequest;
 import blackdemise.cp.chat.entity.Conversation;
 import blackdemise.cp.chat.entity.Message;
+import blackdemise.cp.common.exception.BadRequestException;
 import blackdemise.cp.common.exception.NotFoundException;
 import blackdemise.cp.user.Role;
 import blackdemise.cp.user.User;
 import blackdemise.cp.user.UserRepository;
+
 
 class ChatServiceTest {
 
@@ -67,6 +76,7 @@ class ChatServiceTest {
                 .thenReturn("rendered system prompt");
         when(aiService.generate("rendered system prompt", "conversation prompt"))
                 .thenReturn("assistant answer");
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -110,10 +120,112 @@ class ChatServiceTest {
         verify(messageRepository, never()).findByConversationIdOrderByCreatedAtAsc(conversationId);
     }
 
+    @Test
+    void sendStream_savesUserMessageAndStreamsAssistantReplyWithUsage() throws InterruptedException {
+        CountDownLatch completed = new CountDownLatch(1);
+        AiUsage usage = new AiUsage(12, 8, 20);
+        doAnswer(invocation -> {
+            AiStreamHandler handler = invocation.getArgument(2);
+            handler.onChunk("Hello");
+            handler.onChunk(" there");
+            handler.onComplete(usage);
+            completed.countDown();
+            return null;
+        }).when(aiService).generateStream(any(), any(), any());
+
+        chatService.sendStream(userId, conversationId, new SendMessageRequest("What should I practice?"));
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+
+        ArgumentCaptor<Message> saved = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository, org.mockito.Mockito.times(2)).save(saved.capture());
+        Message assistantMessage = saved.getAllValues().get(1);
+        assertThat(assistantMessage.getRole()).isEqualTo(MessageRole.ASSISTANT);
+        assertThat(assistantMessage.getContent()).isEqualTo("Hello there");
+        assertThat(assistantMessage.getPromptTokens()).isEqualTo(12);
+        assertThat(assistantMessage.getCompletionTokens()).isEqualTo(8);
+        assertThat(assistantMessage.getTotalTokens()).isEqualTo(20);
+    }
+
+    @Test
+    void regenerateStream_throwsBadRequest_whenTargetIsNotLatestAssistantMessage() {
+        UUID staleMessageId = UUID.randomUUID();
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId))
+                .thenReturn(List.of(message(MessageRole.USER, "Q", UUID.randomUUID()),
+                        message(MessageRole.ASSISTANT, "A", UUID.randomUUID())));
+
+        assertThatThrownBy(() -> chatService.regenerateStream(userId, conversationId, staleMessageId))
+                .isInstanceOf(BadRequestException.class);
+        verify(aiService, never()).generateStream(any(), any(), any());
+    }
+
+    @Test
+    void regenerateStream_deletesLatestAssistantMessageAndStreamsReplacement() throws InterruptedException {
+        UUID assistantMessageId = UUID.randomUUID();
+        Message userMessage = message(MessageRole.USER, "Q", UUID.randomUUID());
+        Message assistantMessage = message(MessageRole.ASSISTANT, "Old answer", assistantMessageId);
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId))
+                .thenReturn(new ArrayList<>(List.of(userMessage, assistantMessage)));
+
+        CountDownLatch completed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            AiStreamHandler handler = invocation.getArgument(2);
+            handler.onComplete(new AiUsage(1, 1, 2));
+            completed.countDown();
+            return null;
+        }).when(aiService).generateStream(any(), any(), any());
+
+        chatService.regenerateStream(userId, conversationId, assistantMessageId);
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        verify(messageRepository).delete(assistantMessage);
+    }
+
+    @Test
+    void editAndStream_throwsBadRequest_whenTargetIsNotUserMessage() {
+        UUID assistantMessageId = UUID.randomUUID();
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId))
+                .thenReturn(List.of(message(MessageRole.ASSISTANT, "Answer", assistantMessageId)));
+
+        assertThatThrownBy(() -> chatService.editAndStream(userId, conversationId, assistantMessageId,
+                new EditMessageRequest("New content")))
+                .isInstanceOf(BadRequestException.class);
+        verify(aiService, never()).generateStream(any(), any(), any());
+    }
+
+    @Test
+    void editAndStream_updatesMessageAndPrunesSubsequentHistory() throws InterruptedException {
+        UUID userMessageId = UUID.randomUUID();
+        Message userMessage = message(MessageRole.USER, "Old question", userMessageId);
+        Message assistantMessage = message(MessageRole.ASSISTANT, "Old answer", UUID.randomUUID());
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId))
+                .thenReturn(new ArrayList<>(List.of(userMessage, assistantMessage)));
+
+        CountDownLatch completed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            AiStreamHandler handler = invocation.getArgument(2);
+            handler.onComplete(new AiUsage(1, 1, 2));
+            completed.countDown();
+            return null;
+        }).when(aiService).generateStream(any(), any(), any());
+
+        chatService.editAndStream(userId, conversationId, userMessageId, new EditMessageRequest("New question"));
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(userMessage.getContent()).isEqualTo("New question");
+        verify(messageRepository).deleteAll(List.of(assistantMessage));
+    }
+
     private Message message(MessageRole role, String content) {
         Message message = new Message();
         message.setRole(role);
         message.setContent(content);
+        return message;
+    }
+
+    private Message message(MessageRole role, String content, UUID id) {
+        Message message = message(role, content);
+        message.setId(id);
         return message;
     }
 }

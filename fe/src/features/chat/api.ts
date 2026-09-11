@@ -33,3 +33,18 @@ export async function sendMessage(conversationId: string, content: string): Prom
 export async function deleteConversation(conversationId: string): Promise<void> {
   await unwrap<null>(apiClient.delete<ApiResponse<null>>(`/conversations/${conversationId}`))
 }
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
+
+export function sendMessageStreamUrl(conversationId: string): string {
+  return `${apiBaseUrl}/conversations/${conversationId}/messages/stream`
+}
+
+export function regenerateMessageStreamUrl(conversationId: string, messageId: string): string {
+  return `${apiBaseUrl}/conversations/${conversationId}/messages/${messageId}/regenerate`
+}
+
+export function editMessageStreamUrl(conversationId: string, messageId: string): string {
+  return `${apiBaseUrl}/conversations/${conversationId}/messages/${messageId}/edit`
+}
+
