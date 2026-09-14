@@ -1560,3 +1560,101 @@ both correct per the user's ChatGPT-like comparison and readily achievable.
 
 ---
 
+## Entry 22 — 2026-09-12 — Implement use cases 1.8 (intent classification) and 1.9 (conversation summarization)
+
+### User Prompt (verbatim, across the conversation)
+
+> Now let's dive deeper into 1.8 - 1.10 to see what we need to keep in mind, all possible
+> solutions and discuss the most proper choice we will go with. After we lock down our decisions,
+> we will proceed with implementation.
+
+(Decisions were then locked via a structured Q&A: 1.8 = separate classification call, persist
+intent, skip generation on OUT_OF_SCOPE; 1.9 = 20-message recent window, summarize once history
+exceeds 30 messages; 1.10 = defer entirely, both the web-search-grounding part and the
+memory/retrieval part.)
+
+### Assessment
+
+`docs/06-roadmap-scope.md` §27.4 ("Red Advanced") and this repo's own
+[copilot-instructions.md](../.github/copilot-instructions.md) explicitly discourage RAG/vector
+search/long-term memory unless requested, so 1.10's memory/retrieval half was flagged as
+out-of-guardrail before any implementation started; the user chose to defer all of 1.10 (including
+web search grounding) rather than override the guardrail. For 1.8, cross-feature context
+injection (`requiresCv`/`requiresProfile`/`requiresWeb` flags from the roadmap's example schema)
+has no consumer yet (4.x not built), so the classification was scoped down to just persisting the
+`intent` value and using it for a stronger, structured out-of-scope refusal — a genuine
+defense-in-depth improvement on top of 1.5's prompt-only scope control. For 1.9, the existing
+`ChatService.buildConversationPrompt` sent the entire message history on every turn with no bound,
+which grows cost/latency unboundedly as conversations get long.
+
+### What Was Done
+
+**1.8 — Intent classification**
+- Added `AiService.classify(systemPrompt, userPrompt, allowedValues)` /
+  `AiServiceImpl` impl, and `GeminiClient.generateClassification(...)` using the Gemini SDK's
+  structured output (`responseMimeType=application/json` + `responseSchema` with an
+  enum-constrained `Schema`), temperature 0, small `maxOutputTokens`. No retry (kept simple;
+  `ChatService` fails open on any exception).
+- Added [ChatIntent](../be/src/main/java/blackdemise/cp/chat/ChatIntent.java) enum
+  (`GENERAL_CAREER`, `TECHNICAL`, `CV_DISCUSSION`, `INTERVIEW_DISCUSSION`, `OUT_OF_SCOPE`), a
+  nullable `intent` column on `Message` (Flyway `V6`), and `prompts/chat-intent.txt`.
+- `ChatService.classifyIntent(...)` classifies the latest user message (fail-open to
+  `GENERAL_CAREER` on any error, since the system prompt still enforces scope as a fallback);
+  `classifyAndStream(...)` (shared by `sendStream` and `editAndStream`) persists the intent on the
+  user message and, for `OUT_OF_SCOPE`, calls `streamCannedRefusal(...)` instead of invoking
+  Gemini at all — reusing the existing `AssistantStreamHandler` so the SSE contract (chunk/done)
+  stays identical to a normal reply. The legacy blocking `send()` endpoint got the same
+  classify-then-refuse-or-generate treatment for parity.
+
+**1.9 — Conversation summarization**
+- Added nullable `summary` (TEXT) and `summarizedThroughCount` (int, default 0) columns to
+  `Conversation` (Flyway `V7`), and `prompts/chat-summary.txt`.
+- `ChatService.buildConversationPrompt(conversation, messages)` now prefixes the prompt with
+  `conversation.getSummary()` (if present) and only includes the last 20 messages verbatim,
+  instead of the full history.
+- `ChatService.maybeSummarize(conversation)` runs after every completed turn (from
+  `AssistantStreamHandler.onComplete`, so it never blocks the SSE response): once
+  `total - summarizedThroughCount` exceeds 30, it folds the messages older than the 20-message
+  window into an updated summary via `aiService.generate(...)`, merging with any prior summary.
+  Failures are swallowed (best-effort; retried on the next turn) so a summarization hiccup never
+  breaks the user's conversation.
+- Added tests: `AiServiceImplTest` (`classify` happy path + blank-response failure);
+  `ChatServiceTest` (OUT_OF_SCOPE skips `generateStream` and persists a refusal + intent;
+  classification failures fall back to `GENERAL_CAREER` and still generate normally;
+  summarization triggers and updates `Conversation.summary`/`summarizedThroughCount` once the
+  threshold is crossed, and does nothing below it).
+- Marked 1.8 and 1.9 `Yes` in [docs/02-use-cases.md](./02-use-cases.md); 1.10 stays `No`
+  (explicitly deferred).
+- Verified: `.\mvnw.cmd -q test` (full backend suite) passes. No frontend changes were needed —
+  both use cases are backend-only (intent isn't surfaced in the UI; summarization is transparent
+  to the client).
+
+### What Could Not Be Done
+
+- 1.10 (web search grounding and semantic/long-term memory/cross-conversation retrieval) was not
+  implemented — explicitly deferred by the user's own choice, consistent with the project's "Red
+  Advanced" guardrail against RAG/vector databases.
+- Did not implement the roadmap's `requiresProfile`/`requiresCv`/`requiresWeb` context-selection
+  flags alongside intent classification, since nothing in the codebase consumes them yet (4.x
+  cross-feature integration is not built); adding them now would have been speculative code with
+  no caller.
+
+### Alternatives Considered
+
+- Considered combining classification and generation into a single structured-JSON call (one
+  round trip instead of two). Rejected: it would return the full assistant reply as one JSON blob
+  only after complete generation, defeating the real token-by-token streaming built in Entry 21.
+- Considered a heuristic/keyword-based classifier instead of an LLM call, for zero extra latency
+  and cost. Rejected in favor of the LLM-based classifier for better judgment on the
+  hardest case (nuanced out-of-scope detection), with the model call kept cheap (temperature 0,
+  `maxOutputTokens=16`, no system prompt).
+- Considered summarizing synchronously before generating a reply once the threshold is crossed.
+  Rejected in favor of asynchronous, post-response summarization so it never adds latency to the
+  user-facing stream.
+- Considered plain truncation (drop old messages, no summary) instead of summarization. Rejected
+  as it would silently lose context the user might still be referencing, and doesn't satisfy the
+  use case's literal "summarization" requirement.
+
+
+---
+

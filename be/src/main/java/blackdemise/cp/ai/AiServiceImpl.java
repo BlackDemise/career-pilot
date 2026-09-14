@@ -1,5 +1,7 @@
 package blackdemise.cp.ai;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.google.genai.ResponseStream;
@@ -51,6 +53,16 @@ public class AiServiceImpl implements AiService {
         }
     }
 
+    @Override
+    public String classify(String systemPrompt, String userPrompt, List<String> allowedValues) {
+        Content systemInstruction = systemInstruction(systemPrompt);
+        Content userContent = Content.fromParts(Part.fromText(userPrompt));
+
+        GenerateContentResponse response = geminiClient.generateClassification(systemInstruction, userContent, allowedValues);
+        String text = extractText(response);
+        return stripJsonQuotes(text.trim());
+    }
+
     private Content systemInstruction(String systemPrompt) {
         return (systemPrompt == null || systemPrompt.isBlank())
                 ? null
@@ -65,9 +77,16 @@ public class AiServiceImpl implements AiService {
         return text;
     }
 
+    private String stripJsonQuotes(String text) {
+        if (text.length() >= 2 && text.startsWith("\"") && text.endsWith("\"")) {
+            return text.substring(1, text.length() - 1);
+        }
+        return text;
+    }
+
     private AiUsage extractUsage(GenerateContentResponse response, AiUsage previous) {
         return response.usageMetadata()
-                .map(metadata -> toUsage(metadata))
+                .map(this::toUsage)
                 .orElse(previous);
     }
 
@@ -78,4 +97,5 @@ public class AiServiceImpl implements AiService {
                 metadata.totalTokenCount().orElse(0));
     }
 }
+
 

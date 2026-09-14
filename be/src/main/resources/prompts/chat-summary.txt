@@ -1,0 +1,11 @@
+Summarize the following career-chat conversation excerpt for use as background context in
+future turns. Preserve concrete facts, decisions, and user preferences; omit small talk. Merge
+with the prior summary if one is provided.
+
+Prior summary:
+{{prior_summary}}
+
+New messages to fold in:
+{{transcript}}
+
+Return only the updated summary, in prose, under 200 words.

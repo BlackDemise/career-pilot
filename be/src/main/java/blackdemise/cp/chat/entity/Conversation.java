@@ -25,4 +25,12 @@ public class Conversation extends BaseEntity {
 
     @Column(nullable = false)
     private String title;
+
+    // Rolling summary of messages older than the recent window kept in every prompt (see
+    // ChatService.buildConversationPrompt); null until the conversation is long enough to need one.
+    @Column(columnDefinition = "TEXT")
+    private String summary;
+
+    @Column(nullable = false)
+    private int summarizedThroughCount;
 }

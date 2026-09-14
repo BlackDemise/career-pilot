@@ -53,8 +53,8 @@ planned unless explicitly requested).
 | 1.5 | Chat enforces career/tech scope; out-of-scope questions are refused via system prompt | P0 | Yes |
 | 1.6 | User deletes a conversation | P0 | Yes |
 | 1.7 | Streaming responses, regenerate/retry, edit user message, markdown rendering | P1 | Yes |
-| 1.8 | Intent classification (GENERAL_CAREER, TECHNICAL, CV_DISCUSSION, INTERVIEW_DISCUSSION, OUT_OF_SCOPE) | P1 | No |
-| 1.9 | Conversation summarization for long conversations | P1 | No |
+| 1.8 | Intent classification (GENERAL_CAREER, TECHNICAL, CV_DISCUSSION, INTERVIEW_DISCUSSION, OUT_OF_SCOPE) | P1 | Yes |
+| 1.9 | Conversation summarization for long conversations | P1 | Yes |
 | 1.10 | Web search grounding, semantic/long-term memory, cross-conversation retrieval | P2/P3 | No |
 
 ## 2. CV Analysis

@@ -1,5 +1,7 @@
 package blackdemise.cp.ai;
 
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 
 import com.google.genai.Client;
@@ -9,6 +11,8 @@ import com.google.genai.types.Content;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.HttpOptions;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
 
 // Thin wrapper around the official Google Gen AI Java SDK (com.google.genai:google-genai).
 @Component
@@ -56,6 +60,27 @@ public class GeminiClient {
         }
     }
 
+    // Deterministic, enum-constrained JSON output for cheap classification decisions.
+    public GenerateContentResponse generateClassification(Content systemInstruction, Content userContent,
+            List<String> allowedValues) {
+        Schema schema = Schema.builder().type(new Type(Type.Known.STRING)).enum_(allowedValues).build();
+        GenerateContentConfig.Builder configBuilder = GenerateContentConfig.builder()
+                .temperature(0f)
+                .maxOutputTokens(16)
+                .responseMimeType("application/json")
+                .responseSchema(schema);
+        if (systemInstruction != null) {
+            configBuilder.systemInstruction(systemInstruction);
+        }
+        try {
+            return client.models.generateContent(properties.model(), userContent, configBuilder.build());
+        } catch (GenAiIOException ex) {
+            throw new AiServiceException("Gemini API request timed out or was unreachable", ex);
+        } catch (RuntimeException ex) {
+            throw new AiServiceException("Gemini API call failed", ex);
+        }
+    }
+
     private GenerateContentConfig buildConfig(Content systemInstruction) {
         GenerateContentConfig.Builder configBuilder = GenerateContentConfig.builder()
                 .temperature((float) properties.temperature())
@@ -75,4 +100,5 @@ public class GeminiClient {
         }
     }
 }
+
 

@@ -116,5 +116,27 @@ class AiServiceImplTest {
 
         assertThat(errorRef.get()).isInstanceOf(AiServiceException.class);
     }
+
+    @Test
+    void classify_returnsAllowedValue_stripped_ofJsonQuotes() {
+        GenerateContentResponse response = mock(GenerateContentResponse.class);
+        when(response.text()).thenReturn("\"TECHNICAL\"");
+        when(geminiClient.generateClassification(any(), any(), any())).thenReturn(response);
+
+        String result = aiService.classify(null, "classify this message", List.of("GENERAL_CAREER", "TECHNICAL"));
+
+        assertThat(result).isEqualTo("TECHNICAL");
+    }
+
+    @Test
+    void classify_throwsAiServiceException_whenResponseIsBlank() {
+        GenerateContentResponse response = mock(GenerateContentResponse.class);
+        when(response.text()).thenReturn("");
+        when(geminiClient.generateClassification(any(), any(), any())).thenReturn(response);
+
+        assertThatThrownBy(() -> aiService.classify(null, "classify this message", List.of("TECHNICAL")))
+                .isInstanceOf(AiServiceException.class);
+    }
 }
+
 

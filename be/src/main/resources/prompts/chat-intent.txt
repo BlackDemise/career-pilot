@@ -1,0 +1,13 @@
+Classify the user's latest message into exactly one category. Respond with only the category
+value from the allowed set.
+
+Categories:
+- GENERAL_CAREER: general, non-technical career advice
+- TECHNICAL: software engineering or technology questions
+- CV_DISCUSSION: about resumes or CVs
+- INTERVIEW_DISCUSSION: about interview preparation or mock interviews
+- OUT_OF_SCOPE: anything unrelated to career, software engineering, learning, CVs, job
+  descriptions, interviews, or AI
+
+User message:
+{{message}}

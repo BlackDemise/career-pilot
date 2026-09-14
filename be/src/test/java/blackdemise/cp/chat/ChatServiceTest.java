@@ -94,7 +94,8 @@ class ChatServiceTest {
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         verify(aiService).generate(eq("rendered system prompt"), prompt.capture());
         assertThat(prompt.getValue()).contains("USER: How do I prepare?", "ASSISTANT: Practice examples.");
-        verify(messageRepository, org.mockito.Mockito.times(2)).save(any(Message.class));
+        // user message save, intent save, assistant message save
+        verify(messageRepository, org.mockito.Mockito.times(3)).save(any(Message.class));
     }
 
     @Test
@@ -138,13 +139,105 @@ class ChatServiceTest {
         assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
 
         ArgumentCaptor<Message> saved = ArgumentCaptor.forClass(Message.class);
-        verify(messageRepository, org.mockito.Mockito.times(2)).save(saved.capture());
-        Message assistantMessage = saved.getAllValues().get(1);
+        // user message save, intent save, assistant message save
+        verify(messageRepository, org.mockito.Mockito.times(3)).save(saved.capture());
+        Message assistantMessage = saved.getAllValues().get(2);
         assertThat(assistantMessage.getRole()).isEqualTo(MessageRole.ASSISTANT);
         assertThat(assistantMessage.getContent()).isEqualTo("Hello there");
         assertThat(assistantMessage.getPromptTokens()).isEqualTo(12);
         assertThat(assistantMessage.getCompletionTokens()).isEqualTo(8);
         assertThat(assistantMessage.getTotalTokens()).isEqualTo(20);
+    }
+
+    @Test
+    void sendStream_classifiesOutOfScopeAndSkipsGenerationInFavorOfCannedRefusal() throws InterruptedException {
+        when(aiService.classify(any(), any(), any())).thenReturn("OUT_OF_SCOPE");
+        CountDownLatch completed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            Message saved = invocation.getArgument(0);
+            if (saved.getRole() == MessageRole.ASSISTANT) {
+                completed.countDown();
+            }
+            return saved;
+        }).when(messageRepository).save(any(Message.class));
+
+        chatService.sendStream(userId, conversationId, new SendMessageRequest("What's the weather today?"));
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        verify(aiService, never()).generateStream(any(), any(), any());
+
+        ArgumentCaptor<Message> saved = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository, org.mockito.Mockito.atLeast(3)).save(saved.capture());
+        Message userMessage = saved.getAllValues().get(0);
+        assertThat(userMessage.getIntent()).isEqualTo(ChatIntent.OUT_OF_SCOPE);
+        Message assistantMessage = saved.getAllValues().get(saved.getAllValues().size() - 1);
+        assertThat(assistantMessage.getRole()).isEqualTo(MessageRole.ASSISTANT);
+        assertThat(assistantMessage.getContent()).contains("career", "software engineering");
+    }
+
+    @Test
+    void sendStream_fallsBackToGeneralCareer_whenClassificationFails() throws InterruptedException {
+        when(aiService.classify(any(), any(), any())).thenThrow(new RuntimeException("classification unavailable"));
+        CountDownLatch completed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            AiStreamHandler handler = invocation.getArgument(2);
+            handler.onComplete(new AiUsage(1, 1, 2));
+            completed.countDown();
+            return null;
+        }).when(aiService).generateStream(any(), any(), any());
+
+        chatService.sendStream(userId, conversationId, new SendMessageRequest("How do I grow as an engineer?"));
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        verify(aiService).generateStream(any(), any(), any());
+    }
+
+    @Test
+    void maybeSummarize_updatesConversationSummary_onceThresholdCrossed() throws InterruptedException {
+        List<Message> longHistory = new ArrayList<>();
+        for (int i = 0; i < 31; i++) {
+            longHistory.add(message(i % 2 == 0 ? MessageRole.USER : MessageRole.ASSISTANT, "message " + i));
+        }
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId)).thenReturn(longHistory);
+        when(promptTemplateService.render(eq("chat-summary"), any(Map.class))).thenReturn("summary prompt");
+        when(aiService.generate(eq(null), eq("summary prompt"))).thenReturn("Updated summary.");
+
+        CountDownLatch completed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            AiStreamHandler handler = invocation.getArgument(2);
+            handler.onComplete(new AiUsage(1, 1, 2));
+            completed.countDown();
+            return null;
+        }).when(aiService).generateStream(any(), any(), any());
+
+        chatService.sendStream(userId, conversationId, new SendMessageRequest("Let's keep going"));
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(conversation.getSummary()).isEqualTo("Updated summary.");
+        assertThat(conversation.getSummarizedThroughCount()).isEqualTo(11);
+    }
+
+    @Test
+    void maybeSummarize_doesNothing_whenBelowThreshold() throws InterruptedException {
+        List<Message> shortHistory = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            shortHistory.add(message(MessageRole.USER, "message " + i));
+        }
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId)).thenReturn(shortHistory);
+
+        CountDownLatch completed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            AiStreamHandler handler = invocation.getArgument(2);
+            handler.onComplete(new AiUsage(1, 1, 2));
+            completed.countDown();
+            return null;
+        }).when(aiService).generateStream(any(), any(), any());
+
+        chatService.sendStream(userId, conversationId, new SendMessageRequest("Quick question"));
+
+        assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(conversation.getSummary()).isNull();
+        verify(aiService, never()).generate(eq(null), any(String.class));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package blackdemise.cp.chat.entity;
 
+import blackdemise.cp.chat.ChatIntent;
 import blackdemise.cp.chat.MessageRole;
 import blackdemise.cp.common.BaseEntity;
 import jakarta.persistence.Column;
@@ -36,4 +37,8 @@ public class Message extends BaseEntity {
     private Integer promptTokens;
     private Integer completionTokens;
     private Integer totalTokens;
+
+    // Populated only for USER messages, from the intent classification call.
+    @Enumerated(EnumType.STRING)
+    private ChatIntent intent;
 }
