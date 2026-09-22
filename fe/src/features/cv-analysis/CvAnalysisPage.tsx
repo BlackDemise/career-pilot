@@ -1,14 +1,16 @@
-import { type ChangeEvent, useMemo, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Sparkles, UploadCloud } from 'lucide-react'
 import { PageMessage } from '../../shared/components/PageMessage'
-import { listAnalyses, matchJobDescription, reviewCv, uploadCv, type CvAnalysisRecord, type CvDocument, type CvJdMatchResult, type CvReviewResult } from './api'
+import { getAnalysisJob, listAnalyses, matchJobDescription, reviewCv, uploadCv, type CvAnalysisJob, type CvAnalysisRecord, type CvDocument, type CvJdMatchResult, type CvReviewResult } from './api'
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 
 function buildFileError(file: File): string | null {
-  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-  if (!isPdf) return 'Only PDF CV files are supported.'
+  const fileName = file.name.toLowerCase()
+  const isPdf = file.type === 'application/pdf' || fileName.endsWith('.pdf')
+  const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileName.endsWith('.docx')
+  if (!isPdf && !isDocx) return 'Only PDF and DOCX CV files are supported.'
   if (file.size > MAX_FILE_SIZE_BYTES) return 'CV file must be 5 MB or smaller.'
   return null
 }
@@ -55,6 +57,8 @@ function MatchCard({ analysis }: { analysis: CvAnalysisRecord }) {
       <div><h4>Missing skills</h4><ul>{result.missingSkills.length ? result.missingSkills.map((item) => <li key={item}>{item}</li>) : <li>None flagged</li>}</ul></div>
       <div className="analysis-grid--wide"><h4>Experience gaps</h4><ul>{result.experienceGaps.length ? result.experienceGaps.map((item) => <li key={item}>{item}</li>) : <li>No notable gaps</li>}</ul></div>
       <div className="analysis-grid--wide"><h4>Recommendations</h4><ul>{result.recommendations.map((item) => <li key={item}>{item}</li>)}</ul></div>
+      <div className="analysis-grid--wide"><h4>Section scores</h4><ul>{result.sectionScores.map((section) => <li key={section.section}><strong>{section.section}:</strong> {section.score}/100</li>)}</ul></div>
+      <div className="analysis-grid--wide"><h4>Requirement judgments</h4><ul>{result.requirementMatches.map((match) => <li key={match.requirementId}><strong>{match.requirementId}:</strong> {match.status.toLowerCase().replaceAll('_', ' ')}{match.verification ? ` (${match.verification.toLowerCase().replaceAll('_', ' ')})` : ''}</li>)}</ul></div>
     </div>
   </article>
 }
@@ -65,6 +69,7 @@ export function CvAnalysisPage() {
   const [jdInput, setJdInput] = useState('')
   const [fileError, setFileError] = useState<string | null>(null)
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
+  const [analysisJob, setAnalysisJob] = useState<CvAnalysisJob | null>(null)
 
   const { data: analyses = [], isLoading: isAnalysesLoading, isError: isAnalysesError, error: analysesError } = useQuery({
     queryKey: ['cv-analyses', selectedCv?.id],
@@ -105,19 +110,31 @@ export function CvAnalysisPage() {
 
   const jdMatchMutation = useMutation({
     mutationFn: () => matchJobDescription(selectedCv!.id, jdInput.trim()),
-    onSuccess: async (analysis) => {
-      queryClient.setQueryData<CvAnalysisRecord[]>(['cv-analyses', selectedCv?.id], (current = []) => {
-        const next = current.filter((item) => item.type !== 'JD_MATCH')
-        return [...next, analysis]
-      })
-      await queryClient.invalidateQueries({ queryKey: ['cv-analyses', selectedCv?.id] })
-      setUploadNotice('JD match analysis completed.')
+    onSuccess: (job) => {
+      setAnalysisJob(job)
+      setFileError(null)
+      setUploadNotice('JD match queued. You can leave this page while it runs.')
     },
     onError: (reason) => {
       setFileError(reason instanceof Error ? reason.message : 'Could not analyze the job description.')
       setUploadNotice(null)
     },
   })
+
+  const analysisJobQuery = useQuery({
+    queryKey: ['cv-analysis-job', analysisJob?.jobId],
+    enabled: Boolean(analysisJob?.jobId),
+    queryFn: () => getAnalysisJob(analysisJob!.jobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'QUEUED' || status === 'RUNNING' ? 1000 : false
+    },
+  })
+
+  useEffect(() => {
+    if (analysisJobQuery.data?.status !== 'COMPLETED') return
+    void queryClient.invalidateQueries({ queryKey: ['cv-analyses', selectedCv?.id] })
+  }, [analysisJobQuery.data?.status, queryClient, selectedCv?.id])
 
   const latestReview = useMemo(() => analyses.find((analysis) => analysis.type === 'REVIEW') ?? null, [analyses])
   const latestMatch = useMemo(() => analyses.find((analysis) => analysis.type === 'JD_MATCH') ?? null, [analyses])
@@ -150,8 +167,8 @@ export function CvAnalysisPage() {
         <aside className="cv-upload-card">
           <div className="upload-box">
             <UploadCloud size={24} />
-            <label htmlFor="cv-upload" className="upload-label">Upload CV PDF</label>
-            <input id="cv-upload" type="file" accept=".pdf,application/pdf" onChange={handleUpload} aria-label="Upload CV PDF" />
+            <label htmlFor="cv-upload" className="upload-label">Upload CV PDF or DOCX</label>
+            <input id="cv-upload" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleUpload} aria-label="Upload CV PDF or DOCX" />
           </div>
 
           {fileError && <PageMessage tone="error">{fileError}</PageMessage>}
@@ -160,10 +177,11 @@ export function CvAnalysisPage() {
           {selectedCv ? <div className="cv-meta">
             <div className="meta-row"><FileText size={16} /><strong>{selectedCv.fileName}</strong></div>
             <p>Uploaded {formatDate(selectedCv.createdAt)}</p>
+            {analysisJob && (analysisJobQuery.isError ? <PageMessage tone="error">Could not refresh the analysis status.</PageMessage> : <PageMessage tone={analysisJobQuery.data?.status === 'FAILED' ? 'error' : analysisJobQuery.data?.status === 'COMPLETED' ? 'success' : 'info'}>{analysisJobQuery.data?.status === 'FAILED' ? (analysisJobQuery.data.errorMessage ?? 'Analysis failed.') : analysisJobQuery.data?.status === 'COMPLETED' ? 'Analysis complete.' : `Analysis status: ${(analysisJobQuery.data?.stage ?? analysisJob.stage).toLowerCase().replaceAll('_', ' ')}.`}</PageMessage>)}
             <button type="button" className="primary-button" onClick={() => void reviewMutation.mutateAsync()} disabled={reviewMutation.isPending || !selectedCv.id}>
               Review CV
             </button>
-          </div> : <p className="empty-state">Upload a PDF to start your analysis.</p>}
+          </div> : <p className="empty-state">Upload a PDF or DOCX to start your analysis.</p>}
 
           {selectedCv && <div className="jd-form">
             <label htmlFor="job-description">Job description</label>

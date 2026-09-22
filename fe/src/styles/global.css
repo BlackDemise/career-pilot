@@ -174,6 +174,7 @@ input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--a
 .upload-box input { display: none; }
 .upload-label { display: inline-block; font-weight: 600; color: var(--accent); cursor: pointer; }
 .cv-meta { display: grid; gap: .75rem; }
+.cv-meta p { color: var(--text-muted); margin: 0; }
 .meta-row { display: flex; align-items: center; gap: .5rem; }
 .cv-main { display: grid; gap: 1rem; }
 .cv-summary-card { padding: 1.25rem; }

@@ -43,24 +43,17 @@ describe('CvAnalysisPage', () => {
     }
     const reviewSpy = vi.spyOn(cvApi, 'reviewCv').mockResolvedValue(reviewData)
 
-    const matchData = {
-      id: 'a-2',
-      cvId: 'cv-1',
-      type: 'JD_MATCH' as const,
-      jobDescription: 'Senior backend engineer',
-      result: {
-        matchScore: 88,
-        matchedSkills: ['Java'],
-        missingSkills: ['Kubernetes'],
-        experienceGaps: ['Infra'],
-        recommendations: ['Highlight it'],
-      },
+    const matchJob = { jobId: 'job-1', cvId: 'cv-1', type: 'JD_MATCH' as const, status: 'COMPLETED' as const, stage: 'COMPLETED', analysisId: 'a-2', errorMessage: null, createdAt: '2024-01-01T00:01:00Z', updatedAt: '2024-01-01T00:01:00Z' }
+    const matchData: cvApi.CvAnalysisRecord = {
+      id: 'a-2', cvId: 'cv-1', type: 'JD_MATCH', jobDescription: 'Senior backend engineer',
+      result: { matchScore: 88, requirements: [], requirementMatches: [], sectionScores: [], matchedSkills: ['Java'], missingSkills: ['Kubernetes'], experienceGaps: ['Infra'], recommendations: ['Highlight it'] },
       createdAt: '2024-01-01T00:01:00Z',
     }
-    const matchSpy = vi.spyOn(cvApi, 'matchJobDescription').mockResolvedValue(matchData)
+    const matchSpy = vi.spyOn(cvApi, 'matchJobDescription').mockResolvedValue(matchJob)
+    vi.spyOn(cvApi, 'getAnalysisJob').mockResolvedValue(matchJob)
 
     // Mock listAnalyses to return empty initially, then with analyses after mutations
-    const analysesState: typeof reviewData[] = []
+    const analysesState: cvApi.CvAnalysisRecord[] = []
     vi.spyOn(cvApi, 'listAnalyses').mockImplementation(() => {
       return Promise.resolve(analysesState)
     })
@@ -69,7 +62,7 @@ describe('CvAnalysisPage', () => {
     renderPage()
 
     // Upload CV
-    const input = screen.getByLabelText(/upload cv pdf/i)
+    const input = screen.getByLabelText(/upload cv pdf or docx/i)
     const file = new File(['pdf text'], 'jane-doe.pdf', { type: 'application/pdf' })
     fireEvent.change(input, { target: { files: [file] } })
 
@@ -100,12 +93,12 @@ describe('CvAnalysisPage', () => {
     const uploadSpy = vi.spyOn(cvApi, 'uploadCv')
     renderPage()
 
-    const input = screen.getByLabelText(/upload cv pdf/i)
+    const input = screen.getByLabelText(/upload cv pdf or docx/i)
     const invalidFile = new File(['nope'], 'notes.txt', { type: 'text/plain' })
 
     fireEvent.change(input, { target: { files: [invalidFile] } })
 
-    await waitFor(() => expect(screen.getByText(/only pdf cv files are supported/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/only pdf and docx cv files are supported/i)).toBeInTheDocument())
     expect(uploadSpy).not.toHaveBeenCalled()
   })
 })
