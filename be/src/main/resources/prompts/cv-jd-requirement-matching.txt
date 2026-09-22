@@ -1,0 +1,15 @@
+Compare the CV against the categorized job requirements below. Return only valid JSON matching:
+{"requirementMatches":[{"requirementId":"string","status":"SUPPORTED|PARTIALLY_SUPPORTED|UNCLEAR|NOT_SUPPORTED","section":"string","evidenceQuote":"string","sourceBlockIds":[],"confidence":0.0}],"matchedSkills":["string"],"missingSkills":["string"],"experienceGaps":["string"],"recommendations":["string"]}
+
+Rules:
+- Evidence must quote text that appears in the CV. Do not invent evidence.
+- Use an empty evidenceQuote and empty sourceBlockIds when there is no support.
+- Confidence must be between 0.0 and 1.0.
+- Match every requirement exactly once.
+- Return only valid JSON. Do not use Markdown fences.
+
+Categorized requirements:
+{{requirements}}
+
+CV:
+{{cv}}

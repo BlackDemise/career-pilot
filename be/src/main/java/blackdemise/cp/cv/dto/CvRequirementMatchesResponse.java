@@ -2,11 +2,8 @@ package blackdemise.cp.cv.dto;
 
 import java.util.List;
 
-public record CvJdMatchResult(
-        int matchScore,
-        List<CvRequirement> requirements,
+public record CvRequirementMatchesResponse(
         List<CvRequirementMatch> requirementMatches,
-        List<CvSectionScore> sectionScores,
         List<String> matchedSkills,
         List<String> missingSkills,
         List<String> experienceGaps,

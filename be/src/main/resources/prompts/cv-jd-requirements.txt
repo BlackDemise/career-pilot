@@ -1,0 +1,15 @@
+Extract the job description into valid JSON matching this exact schema:
+{"requirements":[{"id":"stable-kebab-case-id","requirement":"string","category":"REQUIRED|PREFERRED|OPTIONAL","categoryConfidence":0.0,"categoryRationale":"string","sourceText":"string","section":"string"}]}
+
+Rules:
+- Explicit wording such as must, required, mandatory, essential, and minimum implies REQUIRED.
+- Preferred, desired, beneficial, and advantageous implies PREFERRED.
+- Nice to have, bonus, optional, and extra credit implies OPTIONAL.
+- Unmarked items in general requirements or qualifications default to REQUIRED only when tied to
+  a minimum qualification or essential responsibility; otherwise use PREFERRED.
+- Use OPTIONAL only for clearly secondary or bonus items.
+- Do not invent requirements that are not present in the job description.
+- Return only valid JSON. Do not use Markdown fences.
+
+Job Description:
+{{jd}}
