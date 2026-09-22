@@ -5,8 +5,6 @@ change (code, config, docs, or instructions) is logged here with: the user's pro
 the assessment made, what was done, what could not be done, and alternatives considered. Entries
 are append-only — never rewritten or summarized away.
 
----
-
 ## Entry 1 — Retroactively logged — Refactor project scope into Markdown baseline
 
 > **Note**: This prompt was executed before this logging process existed. It is recorded here
@@ -1532,6 +1530,47 @@ both correct per the user's ChatGPT-like comparison and readily achievable.
   `fe/vite.config.ts` `test` property conflict with `fe/vitest.config.ts`, and a type mismatch in
   `fe/src/features/cv-analysis/CvAnalysisPage.test.tsx`) — neither file was touched by this work.
 
+## Entry 14 — 2026-09-14 — Approve CV analysis architecture and begin implementation
+
+### User Prompt (verbatim)
+
+> For remaining decisions, I agreed with your recommendation.
+> Now let's build the plan so that you can implement and do not lose track of what you do, and start implementing.
+> Just one note: since this is a huge task with multiple business decisions, make sure to document it thoroughly.
+
+### Assessment
+
+The user approved the recommended defaults for CV use cases 2.5 through 2.8: PDF/DOCX-focused
+uploads, lazy AI extraction, versioned structured JSON, breaking result-contract changes because
+there is no production data, separate ATS analysis, immutable originals, backend-owned weighted
+scoring, conservative requirement categorization, evidence grounding against source CV text, and
+persisted asynchronous jobs with SSE notifications plus status recovery. The work is too broad for
+one unreviewed edit, so implementation is divided into vertical phases with a durable design record
+and focused validation gates.
+
+### What Was Done
+
+Added [docs/07-cv-analysis-implementation-plan.md](./07-cv-analysis-implementation-plan.md), which
+records the approved decisions, score and categorization rules, evidence-verification policy,
+async job contract, data-model direction, delivery phases, and quality gates. The first coding
+slice is planned as content-validated PDF/DOCX upload plus lazy structured-extraction job support;
+later slices will add two-step matching, evidence/ATS, and immutable rewrite workflows.
+
+### What Could Not Be Done
+
+The full implementation of use cases 2.5 through 2.8 is not complete in this entry. The remaining
+work spans new persistence, AI contracts, asynchronous execution, controller APIs, frontend state,
+and tests. Generated tailored-document output is also intentionally not finalized until the derived
+CV/version contract is agreed in the rewrite phase.
+
+### Alternatives
+
+The plan considered synchronous analysis, WebSockets, unpersisted application jobs, direct
+model-generated match scores, and normalizing all AI output into separate relational tables. Those
+alternatives were rejected in favor of lazy extraction, persisted jobs with SSE/status recovery,
+backend-calculated scores, and typed JSON until independent querying or editing justifies further
+normalization.
+
 ### What Could Not Be Done
 
 - Did not add a dedicated unit test for `GeminiClient`'s retry loop in isolation: the class wraps
@@ -1657,4 +1696,194 @@ which grows cost/latency unboundedly as conversations get long.
 
 
 ---
+
+## Entry 23 — 2026-09-14 — Implement DOCX validation and lazy structured extraction jobs
+
+### User Prompt (verbatim)
+
+> Tell me the current progress and the entire plan to process through, and continue implementing the next part.
+
+### Assessment
+
+The approved CV plan had its upload boundary implemented, but structured extraction was not yet
+persisted or observable. The next safe vertical slice was to add versioned extraction state and a
+durable job record without making upload dependent on Gemini or changing the existing review and
+JD-match endpoints prematurely.
+
+### What Was Done
+
+- Added `CvExtractionStatus` and versioned structured extraction fields to `Cv`.
+- Added Flyway `V8__add_cv_structured_extraction.sql` for extraction JSON, version, status, errors,
+  and the `cv_extraction_jobs` table.
+- Added typed `CvStructuredExtraction` and `CvExtractionJobResponse` DTOs.
+- Added `cv-structured-extraction.txt` with source-block-preserving JSON rules.
+- Added `CvExtractionJobService`, repository, entity, lifecycle statuses, and virtual-thread worker.
+- Added `POST /api/v1/cvs/{cvId}/extraction`, returning `202 Accepted`, and ownership-scoped
+  `GET /api/v1/cvs/extraction-jobs/{jobId}` status retrieval.
+- Added tests for job creation, job ownership isolation, PDF/DOCX upload, and content mismatch.
+- Added an explicit executor shutdown hook for application and test lifecycle cleanup.
+
+### What Could Not Be Done
+
+SSE event delivery is not implemented yet; the persisted status endpoint is the current recovery
+mechanism. Existing review and JD-match operations still run synchronously and do not yet trigger
+extraction automatically. Requirement extraction, backend-owned matching scores, evidence
+verification, ATS analysis, rewrite suggestions, frontend job state, and generated CV versions
+remain future phases.
+
+### Alternatives
+
+The implementation considered running extraction during upload, but rejected it because upload must
+remain consistently successful without AI. It also considered adding SSE before a persisted job
+state existed, but deferred SSE until the job lifecycle and replayable status contract are stable.
+
+## Entry 24 — 2026-09-14 — Implement Phase 2 typed JD matching core
+
+### User Prompt (verbatim)
+
+> Proceed with phase 2.
+
+### Assessment
+
+Phase 2 needed a typed two-step workflow instead of extending the old opaque model-generated score.
+The first implementation slice therefore establishes the domain contract and deterministic scoring
+before converting review and JD matching to the shared asynchronous job lifecycle.
+
+### What Was Done
+
+- Added `RequirementCategory` with `REQUIRED`, `PREFERRED`, and `OPTIONAL`.
+- Added `CvMatchStatus` with supported, partial, unclear, and unsupported judgments.
+- Added typed requirement, requirement-match, and section-score DTOs.
+- Added separate prompts for JD requirement extraction and CV requirement matching.
+- Updated JD matching to make two AI calls: categorize requirements, then judge CV coverage.
+- Added `CvMatchScoreCalculator` using the approved category weights and coverage values.
+- The backend now calculates overall and section scores and ignores any model-provided overall score.
+- Added focused scoring and two-step service tests.
+- Updated the implementation plan with the Phase 2 progress boundary.
+
+### What Could Not Be Done
+
+The existing match endpoint is still synchronous. It does not yet automatically queue structured
+extraction when extraction is incomplete, and evidence quotes/source block IDs are not yet verified
+against persisted structured CV blocks. SSE delivery, frontend job state, ATS analysis, and rewrite
+workflows remain unfinished.
+
+### Alternatives
+
+The implementation considered retaining the original single prompt and model-generated `matchScore`.
+That was rejected because it would make scores non-reproducible and prevent section scores from
+being derived from the same requirement judgments as the overall score.
+
+## Entry 25 — 2026-09-14 — Complete asynchronous Phase 2 JD matching and evidence grounding
+
+### User Prompt (verbatim)
+
+> Proceed with the rest of Phase 2.
+
+### Assessment
+
+The typed two-step matching core was complete, but Phase 2 still lacked a persisted analysis job,
+lazy extraction integration, and backend evidence grounding. Those responsibilities were added as
+a separate job path so upload remained AI-independent and the existing service logic could be
+tested before the frontend contract changes.
+
+### What Was Done
+
+- Added persisted `CvAnalysisJob` state and Flyway migration `V9__add_cv_analysis_jobs.sql`.
+- Added asynchronous JD-match job creation returning `202 Accepted`.
+- Added ownership-scoped analysis-job status retrieval.
+- Made the worker ensure structured extraction before matching.
+- Linked completed jobs to their persisted `CvAnalysis` record.
+- Added exact and normalized evidence verification against stored CV text.
+- Downgraded unsupported positive evidence to `UNCLEAR` before deterministic scoring.
+- Added async job, evidence, and full Phase 2 tests.
+- Updated the implementation plan with the completed Phase 2 backend boundary.
+
+### What Could Not Be Done
+
+SSE lifecycle delivery and frontend job-state integration are not implemented yet. Matching still
+uses raw extracted CV text in the matching prompt; source-block-specific verification will be
+strengthened when the structured extraction JSON becomes the direct matching input. Review jobs,
+ATS analysis, rewrite workflows, and generated CV versions remain future work.
+
+### Alternatives
+
+The implementation considered making the controller wait for extraction and both AI calls. That
+was rejected because Gemini latency and failures would block the request and violate the approved
+navigation-safe workflow. It also considered trusting model confidence and evidence quotes without
+verification; that was rejected because model confidence cannot establish that a claim exists in
+the uploaded CV.
+
+## Entry 26 — 2026-09-14 — Integrate the asynchronous CV workflow into the frontend
+
+### User Prompt (verbatim)
+
+> Move on with frontend integration first before Phase 3.
+
+### Assessment
+
+The backend now returns an asynchronous JD-match job rather than a completed analysis. The existing
+CV page still expected synchronous analysis responses and only accepted PDF files, so it needed a
+typed API contract, job polling/recovery, stage-based status UI, and rendering for the richer Phase
+2 result before ATS work could begin.
+
+### What Was Done
+
+- Added frontend types for analysis jobs, requirement categories, match statuses, evidence status,
+  and section scores.
+- Updated the JD-match API call to consume `202 Accepted` job responses.
+- Added analysis-job status retrieval and React Query polling while jobs are active.
+- Added terminal success/failure handling and analysis-history refresh on completion.
+- Extended upload validation and the file picker to accept PDF and DOCX.
+- Added section-score and requirement-judgment rendering to the JD-match card.
+- Kept progress stage-based rather than presenting a false Gemini percentage.
+- Verified `npm run lint` passes.
+
+### What Could Not Be Done
+
+The frontend does not yet use SSE; polling remains the recovery and notification mechanism. The
+review action still uses the legacy synchronous backend endpoint. `npm run build` remains blocked by
+the pre-existing `fe/vite.config.ts` `test` property type error; no new CV integration TypeScript
+errors remain.
+
+### Alternatives
+
+The implementation considered using native `EventSource`, but the application’s Bearer-token
+authentication and current POST-oriented flow make the existing authenticated query client a safer
+first integration. It also considered rendering a percentage progress bar, but Gemini does not
+provide reliable multi-step completion percentages, so the UI reports backend workflow stages.
+
+## Entry 27 — 2026-09-14 — Finish frontend CV integration
+
+### User Prompt (verbatim)
+
+> Finish off the frontend work.
+
+### Assessment
+
+The frontend consumed the asynchronous JD-match response and polled job status, but the production
+build still had a known Vite configuration error and the CV page had a few unfinished states. The
+remaining work was limited to the existing Phase 2 contract; SSE was not invented because no SSE
+backend endpoint exists yet.
+
+### What Was Done
+
+- Removed the duplicate `test` property from `vite.config.ts`; Vitest configuration remains in
+  `vitest.config.ts`.
+- Surfaced analysis-status refresh failures in the CV page.
+- Corrected the empty upload state to mention both PDF and DOCX.
+- Kept the existing stage-based polling UX and richer section/requirement result rendering.
+- Verified `npm run lint` and `npm run build` both pass.
+
+### What Could Not Be Done
+
+SSE notifications are not implemented because the backend currently exposes authenticated status
+polling only. The synchronous review endpoint also remains unchanged; migrating review to the shared
+analysis-job lifecycle is a backend follow-up.
+
+### Alternatives
+
+The implementation considered adding a frontend-only SSE client, but that would have no server
+endpoint to consume and would bypass the existing Bearer-authenticated API client. Polling remains
+the correct contract until backend SSE support is added.
 
