@@ -1,0 +1,12 @@
+Extract the CV below into valid JSON matching this exact schema:
+{"education":[{"title":"string","organization":"string","dateRange":"string","description":"string","sourceBlockIds":["string"],"sourceText":"string"}],"experience":[{"title":"string","organization":"string","dateRange":"string","description":"string","sourceBlockIds":["string"],"sourceText":"string"}],"projects":[{"title":"string","organization":"string","dateRange":"string","description":"string","sourceBlockIds":["string"],"sourceText":"string"}],"skills":["string"],"certifications":["string"],"languages":["string"]}
+
+Rules:
+- Return empty arrays when a section is absent.
+- Do not invent facts, dates, organizations, skills, or achievements.
+- Preserve source text for every education, experience, and project entry.
+- Assign stable sourceBlockIds such as "experience-1" and "project-2".
+- Return only valid JSON. Do not use Markdown fences.
+
+CV:
+{{cv}}

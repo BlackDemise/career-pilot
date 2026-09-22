@@ -1,7 +1,7 @@
 package blackdemise.cp.cv.entity;
 
 import blackdemise.cp.common.BaseEntity;
-import blackdemise.cp.cv.CvExtractionStatus;
+import blackdemise.cp.cv.CvExtractionJobStatus;
 import blackdemise.cp.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,28 +19,24 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "cvs")
-public class Cv extends BaseEntity {
+@Table(name = "cv_extraction_jobs")
+public class CvExtractionJob extends BaseEntity {
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false)
-    private String fileName;
-
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String extractedText;
-
-    @Column(columnDefinition = "TEXT")
-    private String structuredExtractionJson;
-
-    private Integer structuredExtractionVersion;
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "cv_id", nullable = false)
+    private Cv cv;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private CvExtractionStatus extractionStatus = CvExtractionStatus.NOT_STARTED;
+    private CvExtractionJobStatus status;
+
+    @Column(nullable = false)
+    private String stage;
 
     @Column(columnDefinition = "TEXT")
-    private String extractionError;
+    private String errorMessage;
 }
