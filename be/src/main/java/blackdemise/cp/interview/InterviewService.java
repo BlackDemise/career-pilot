@@ -1,6 +1,8 @@
 package blackdemise.cp.interview;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -87,7 +89,7 @@ public class InterviewService {
         if (validRules.isEmpty() || request.minimumPrimaryQuestions() > request.maximumPrimaryQuestions()) {
             throw new BadRequestException("No valid interview plan exists for this role and level");
         }
-        List<UUID> topicIds = request.topicIds() == null ? List.of() : request.topicIds();
+        List<UUID> topicIds = resolvePlanTopics(validRules, request);
         if (!request.randomPlan() && !validRules.stream().map(rule -> rule.getTopic().getId()).toList().containsAll(topicIds)) {
             throw new BadRequestException("One or more topics are not available for this role and level");
         }
@@ -108,7 +110,7 @@ public class InterviewService {
         session.setTotalTurns(0);
         session.setEndsAt(Instant.now().plusSeconds(request.durationSeconds()));
         session.setCurrentPhase(InterviewPhase.INTRODUCTION);
-        session.setStatus(InterviewStatus.SETUP);
+        session.setStatus(InterviewStatus.PREPARING);
         session.setSelectedPlanJson(write(topicIds));
         return toResponse(sessionRepository.save(session), List.of());
     }
@@ -132,9 +134,12 @@ public class InterviewService {
         if (session.getStatus() == InterviewStatus.COMPLETED) {
             throw new BadRequestException("Interview is already completed");
         }
-        if (session.getEndsAt().isBefore(Instant.now())) {
+        if (session.getEndsAt() != null && session.getEndsAt().isBefore(Instant.now())) {
             complete(session);
             throw new BadRequestException("Interview duration has expired");
+        }
+        if (session.getCurrentQuestionId() != null) {
+            throw new BadRequestException("Interview is already awaiting an answer");
         }
         InterviewQuestion question = new InterviewQuestion();
         question.setSession(session);
@@ -178,15 +183,8 @@ public class InterviewService {
         answer.setSubmittedAt(Instant.now());
         answer.setTimedOut(false);
         answerRepository.save(answer);
-        session.setPrimaryQuestionsAsked(session.getPrimaryQuestionsAsked() + 1);
-        session.setCurrentQuestionId(null);
-        session.setCurrentPhase(nextPhase(session.getCurrentPhase(), session.getPrimaryQuestionsAsked(), session.getMaximumPrimaryQuestions()));
-        if (session.getPrimaryQuestionsAsked() >= session.getMaximumPrimaryQuestions()) {
-            complete(session);
-        } else {
-            session.setStatus(statusFor(session.getCurrentPhase()));
-            sessionRepository.save(session);
-        }
+
+        advanceAfterTurn(session);
         return get(userId, sessionId);
     }
 
@@ -208,21 +206,17 @@ public class InterviewService {
         answer.setSubmittedAt(Instant.now());
         answer.setTimedOut(true);
         answerRepository.save(answer);
-        session.setPrimaryQuestionsAsked(session.getPrimaryQuestionsAsked() + 1);
-        session.setCurrentQuestionId(null);
-        if (session.getPrimaryQuestionsAsked() >= session.getMaximumPrimaryQuestions()) {
-            complete(session);
-        } else {
-            session.setCurrentPhase(nextPhase(session.getCurrentPhase(), session.getPrimaryQuestionsAsked(), session.getMaximumPrimaryQuestions()));
-            session.setStatus(statusFor(session.getCurrentPhase()));
-            sessionRepository.save(session);
-        }
+
+        advanceAfterTurn(session);
         return get(userId, sessionId);
     }
 
     @Transactional
     public void recordIntegrityEvent(UUID userId, UUID sessionId, String eventType, String metadata) {
         InterviewSession session = findSession(userId, sessionId);
+        if (eventType == null || eventType.isBlank()) {
+            throw new BadRequestException("Integrity event type is required");
+        }
         InterviewIntegrityEvent event = new InterviewIntegrityEvent();
         event.setSession(session);
         event.setEventType(eventType);
@@ -249,9 +243,58 @@ public class InterviewService {
         return result;
     }
 
+    private List<UUID> resolvePlanTopics(List<InterviewCatalogRule> validRules, InterviewSetupRequest request) {
+        if (request.randomPlan()) {
+            List<UUID> selected = validRules.stream()
+                    .filter(InterviewCatalogRule::isRequired)
+                    .map(rule -> rule.getTopic().getId())
+                    .distinct()
+                    .toList();
+
+            List<UUID> optionalTopicIds = validRules.stream()
+                    .filter(rule -> !rule.isRequired())
+                    .sorted(Comparator.comparingInt(InterviewCatalogRule::getSelectionWeight).reversed())
+                    .map(rule -> rule.getTopic().getId())
+                    .distinct()
+                    .toList();
+
+            for (UUID optionalId : optionalTopicIds) {
+                if (selected.size() >= request.maximumPrimaryQuestions()) {
+                    break;
+                }
+                if (!selected.contains(optionalId)) {
+                    selected = new ArrayList<>(selected);
+                    selected.add(optionalId);
+                }
+            }
+            return selected;
+        }
+
+        return request.topicIds() == null ? List.of() : request.topicIds();
+    }
+
     private InterviewSession findSession(UUID userId, UUID sessionId) {
         return sessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new NotFoundException("Interview session not found"));
+    }
+
+    private void advanceAfterTurn(InterviewSession session) {
+        session.setPrimaryQuestionsAsked(session.getPrimaryQuestionsAsked() + 1);
+        session.setCurrentQuestionId(null);
+
+        if (session.getPrimaryQuestionsAsked() >= session.getMaximumPrimaryQuestions()) {
+            complete(session);
+            return;
+        }
+        if (session.getEndsAt() != null && session.getEndsAt().isBefore(Instant.now())) {
+            complete(session);
+            return;
+        }
+
+        InterviewPhase nextPhase = nextPhase(session.getCurrentPhase(), session.getPrimaryQuestionsAsked(), session.getMaximumPrimaryQuestions());
+        session.setCurrentPhase(nextPhase);
+        session.setStatus(statusFor(nextPhase));
+        sessionRepository.save(session);
     }
 
     private void complete(InterviewSession session) {

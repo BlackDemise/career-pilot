@@ -36,8 +36,11 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler implements W
             UUID sessionId = UUID.fromString(pathValue(socket.getUri()));
             socket.getAttributes().put("userId", userId);
             socket.getAttributes().put("sessionId", sessionId);
+            var started = interviewService.start(userId, sessionId);
             socket.sendMessage(new TextMessage(jsonMapper.writeValueAsString(
-                    new InterviewSocketEvent("SESSION_STARTED", interviewService.start(userId, sessionId)))));
+                    new InterviewSocketEvent("SESSION_STARTED", started))));
+            socket.sendMessage(new TextMessage(jsonMapper.writeValueAsString(
+                    new InterviewSocketEvent("PHASE_CHANGED", started))));
         } catch (RuntimeException ex) {
             socket.close();
         }
@@ -62,10 +65,13 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler implements W
     private void sendNextOrCompleted(WebSocketSession socket, UUID userId, UUID sessionId) throws Exception {
         var session = interviewService.get(userId, sessionId);
         if (session.status() == InterviewStatus.COMPLETED) {
+            socket.sendMessage(new TextMessage(jsonMapper.writeValueAsString(new InterviewSocketEvent("PHASE_CHANGED", session))));
             socket.sendMessage(new TextMessage(jsonMapper.writeValueAsString(new InterviewSocketEvent("INTERVIEW_COMPLETED", session))));
         } else {
+            var nextQuestion = interviewService.start(userId, sessionId);
+            socket.sendMessage(new TextMessage(jsonMapper.writeValueAsString(new InterviewSocketEvent("PHASE_CHANGED", session))));
             socket.sendMessage(new TextMessage(jsonMapper.writeValueAsString(new InterviewSocketEvent("INTERVIEWER_MESSAGE",
-                    interviewService.start(userId, sessionId)))));
+                    nextQuestion))));
         }
     }
 

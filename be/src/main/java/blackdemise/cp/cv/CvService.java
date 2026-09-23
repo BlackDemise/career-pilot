@@ -2,6 +2,10 @@ package blackdemise.cp.cv;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
@@ -166,7 +170,7 @@ public class CvService {
 
     private DocumentFormat validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("A PDF or DOCX CV file is required");
+            throw new BadRequestException("A PDF, DOCX, or TXT CV file is required");
         }
         if (file.getSize() > maxFileSizeBytes) {
             throw new BadRequestException("CV file must not exceed " + maxFileSizeBytes + " bytes");
@@ -177,8 +181,10 @@ public class CvService {
             format = DocumentFormat.PDF;
         } else if (fileName.endsWith(".docx")) {
             format = DocumentFormat.DOCX;
+        } else if (fileName.endsWith(".txt")) {
+            format = DocumentFormat.TXT;
         } else {
-            throw new BadRequestException("Only PDF and DOCX CV files are supported");
+            throw new BadRequestException("Only PDF, DOCX, and TXT CV files are supported");
         }
         try {
             byte[] content = file.getBytes();
@@ -197,7 +203,10 @@ public class CvService {
             return switch (format) {
                 case PDF -> extractPdfText(content);
                 case DOCX -> extractDocxText(content);
+                case TXT -> extractTxtText(content);
             };
+        } catch (BadRequestException ex) {
+            throw ex;
         } catch (IOException | RuntimeException ex) {
             throw new BadRequestException("Unable to read the " + format.name() + " CV");
         }
@@ -225,6 +234,31 @@ public class CvService {
             }
         }
         return text.toString().trim();
+    }
+
+    private String extractTxtText(byte[] content) {
+        if (containsNullByte(content)) {
+            throw new BadRequestException("TXT CV files must contain plain text");
+        }
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(content))
+                    .toString()
+                    .trim();
+        } catch (CharacterCodingException ex) {
+            throw new BadRequestException("TXT CV files must use UTF-8 encoding");
+        }
+    }
+
+    private boolean containsNullByte(byte[] content) {
+        for (byte value : content) {
+            if (value == 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void appendLine(StringBuilder text, String value) {
@@ -262,6 +296,12 @@ public class CvService {
                 } catch (IOException ex) {
                     return false;
                 }
+            }
+        },
+        TXT {
+            @Override
+            boolean matches(byte[] content) {
+                return true;
             }
         };
 

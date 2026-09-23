@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -102,6 +103,62 @@ class CvServiceTest {
         assertThat(result.extractedText()).contains("Java Spring");
         verify(cvRepository).save(any(Cv.class));
     }
+
+        @Test
+        void upload_extractsUtf8TxtTextAndPersistsCv() {
+        MockMultipartFile file = new MockMultipartFile("file", "resume.txt", "text/plain",
+            "Java developer - Spring Boot".getBytes(StandardCharsets.UTF_8));
+        when(cvRepository.save(any(Cv.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = cvService.upload(userId, file);
+
+        assertThat(result.fileName()).isEqualTo("resume.txt");
+        assertThat(result.extractedText()).isEqualTo("Java developer - Spring Boot");
+        verify(cvRepository).save(any(Cv.class));
+        }
+
+        @Test
+        void uploadRejectsMalformedUtf8Txt() {
+        MockMultipartFile file = new MockMultipartFile("file", "resume.txt", "text/plain",
+            new byte[] {(byte) 0xC3, (byte) 0x28});
+
+        assertThatThrownBy(() -> cvService.upload(userId, file))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("TXT CV files must use UTF-8 encoding");
+        verify(cvRepository, never()).save(any(Cv.class));
+        }
+
+        @Test
+        void uploadRejectsTxtContainingNullByte() {
+        MockMultipartFile file = new MockMultipartFile("file", "resume.txt", "text/plain",
+            "Java\0Spring".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> cvService.upload(userId, file))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("TXT CV files must contain plain text");
+        verify(cvRepository, never()).save(any(Cv.class));
+        }
+
+        @Test
+        void uploadRejectsEmptyTxt() {
+        MockMultipartFile file = new MockMultipartFile("file", "resume.txt", "text/plain", new byte[0]);
+
+        assertThatThrownBy(() -> cvService.upload(userId, file))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("A PDF, DOCX, or TXT CV file is required");
+        verify(cvRepository, never()).save(any(Cv.class));
+        }
+
+        @Test
+        void uploadRejectsTxtExceedingMaximumSize() {
+        MockMultipartFile file = new MockMultipartFile("file", "resume.txt", "text/plain",
+            new byte[5 * 1024 * 1024 + 1]);
+
+        assertThatThrownBy(() -> cvService.upload(userId, file))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("CV file must not exceed 5242880 bytes");
+        verify(cvRepository, never()).save(any(Cv.class));
+        }
 
     @Test
     void uploadRejectsContentThatDoesNotMatchTheExtension() throws Exception {
