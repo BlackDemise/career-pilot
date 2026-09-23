@@ -62,7 +62,7 @@ describe('CvAnalysisPage', () => {
     renderPage()
 
     // Upload CV
-    const input = screen.getByLabelText(/upload cv pdf or docx/i)
+    const input = screen.getByLabelText(/upload cv pdf, docx, or txt/i)
     const file = new File(['pdf text'], 'jane-doe.pdf', { type: 'application/pdf' })
     fireEvent.change(input, { target: { files: [file] } })
 
@@ -93,12 +93,31 @@ describe('CvAnalysisPage', () => {
     const uploadSpy = vi.spyOn(cvApi, 'uploadCv')
     renderPage()
 
-    const input = screen.getByLabelText(/upload cv pdf or docx/i)
+    const input = screen.getByLabelText(/upload cv pdf, docx, or txt/i)
     const invalidFile = new File(['nope'], 'notes.txt', { type: 'text/plain' })
 
     fireEvent.change(input, { target: { files: [invalidFile] } })
 
-    await waitFor(() => expect(screen.getByText(/only pdf and docx cv files are supported/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/only pdf, docx, and txt cv files are supported/i)).toBeInTheDocument())
     expect(uploadSpy).not.toHaveBeenCalled()
+  })
+
+  it('accepts TXT uploads', async () => {
+    const uploadCvData = {
+      id: 'cv-1',
+      fileName: 'jane-doe.txt',
+      extractedText: 'Senior engineer with Java experience',
+      createdAt: '2024-01-01T00:00:00Z',
+    }
+    const uploadSpy = vi.spyOn(cvApi, 'uploadCv').mockResolvedValue(uploadCvData)
+    vi.spyOn(cvApi, 'listAnalyses').mockResolvedValue([])
+    renderPage()
+
+    const input = screen.getByLabelText(/upload cv pdf, docx, or txt/i)
+    const file = new File(['Senior engineer with Java experience'], 'jane-doe.txt', { type: 'text/plain' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => expect(uploadSpy).toHaveBeenCalledWith(file))
+    expect(screen.getByRole('heading', { name: 'jane-doe.txt' })).toBeInTheDocument()
   })
 })

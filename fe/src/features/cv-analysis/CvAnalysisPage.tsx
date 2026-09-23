@@ -10,7 +10,8 @@ function buildFileError(file: File): string | null {
   const fileName = file.name.toLowerCase()
   const isPdf = file.type === 'application/pdf' || fileName.endsWith('.pdf')
   const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileName.endsWith('.docx')
-  if (!isPdf && !isDocx) return 'Only PDF and DOCX CV files are supported.'
+  const isTxt = file.type === 'text/plain' || fileName.endsWith('.txt')
+  if (!isPdf && !isDocx && !isTxt) return 'Only PDF, DOCX, and TXT CV files are supported.'
   if (file.size > MAX_FILE_SIZE_BYTES) return 'CV file must be 5 MB or smaller.'
   return null
 }
@@ -167,8 +168,8 @@ export function CvAnalysisPage() {
         <aside className="cv-upload-card">
           <div className="upload-box">
             <UploadCloud size={24} />
-            <label htmlFor="cv-upload" className="upload-label">Upload CV PDF or DOCX</label>
-            <input id="cv-upload" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleUpload} aria-label="Upload CV PDF or DOCX" />
+            <label htmlFor="cv-upload" className="upload-label">Upload CV PDF, DOCX, or TXT</label>
+            <input id="cv-upload" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={handleUpload} aria-label="Upload CV PDF, DOCX, or TXT" />
           </div>
 
           {fileError && <PageMessage tone="error">{fileError}</PageMessage>}
@@ -181,7 +182,7 @@ export function CvAnalysisPage() {
             <button type="button" className="primary-button" onClick={() => void reviewMutation.mutateAsync()} disabled={reviewMutation.isPending || !selectedCv.id}>
               Review CV
             </button>
-          </div> : <p className="empty-state">Upload a PDF or DOCX to start your analysis.</p>}
+          </div> : <p className="empty-state">Upload a PDF, DOCX, or TXT file to start your analysis.</p>}
 
           {selectedCv && <div className="jd-form">
             <label htmlFor="job-description">Job description</label>

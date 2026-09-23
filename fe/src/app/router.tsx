@@ -8,14 +8,11 @@ import { AppLayout } from './layout/AppLayout'
 import { ChatPage } from '../features/chat/ChatPage'
 import { CvAnalysisPage } from '../features/cv-analysis/CvAnalysisPage'
 import { ProfilePage } from '../features/profile/ProfilePage'
+import { InterviewPage } from '../features/interview/InterviewPage'
 
 function ProtectedRoutes() {
   const { isAuthenticated } = useAuth()
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />
-}
-
-function PlaceholderPage({ title, detail }: { title: string; detail: string }) {
-  return <section className="workspace"><p className="eyebrow">CareerPilot workspace</p><h1>{title}</h1><p className="lede">{detail}</p></section>
 }
 
 export function AppRouter() {
@@ -32,7 +29,7 @@ export function AppRouter() {
         <Route index element={<Navigate to="/chat" replace />} />
         <Route path="chat/:conversationId?" element={<ChatPage />} />
         <Route path="cv" element={<CvAnalysisPage />} />
-        <Route path="interview" element={<PlaceholderPage title="Practice under pressure" detail="Your live interview room will open here." />} />
+        <Route path="interview" element={<InterviewPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Route>
